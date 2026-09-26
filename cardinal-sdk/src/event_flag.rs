@@ -69,10 +69,17 @@ impl EventFlag {
     pub fn scan_type(&self) -> ScanType {
         let event_type = self.event_type();
         let is_dir = matches!(event_type, EventType::Dir);
-        if self.contains(EventFlag::HistoryDone) | self.contains(EventFlag::EventIdsWrapped) {
-            ScanType::Nop
-        } else if self.contains(EventFlag::RootChanged) {
+        if self.intersects(
+            EventFlag::RootChanged
+                | EventFlag::UserDropped
+                | EventFlag::KernelDropped
+                | EventFlag::EventIdsWrapped,
+        ) {
             ScanType::ReScan
+        } else if self.contains(EventFlag::HistoryDone) {
+            ScanType::Nop
+        } else if self.contains(EventFlag::MustScanSubDirs) {
+            ScanType::Folder
         } else {
             // Strange event, doesn't know when it happens, processing it using a generic way
             // e.g. new event: fs_event=FsEvent { path: "/.docid/16777229/changed/782/src=0,dst=41985052", flag: kFSEventStreamEventFlagNone, id: 471533015 }
@@ -149,5 +156,21 @@ mod tests {
             (EventFlag::MustScanSubDirs | EventFlag::ItemIsDir).scan_type(),
             ScanType::Folder
         ));
+        assert_eq!(EventFlag::MustScanSubDirs.scan_type(), ScanType::Folder);
+    }
+
+    #[test]
+    fn lost_events_require_recovery_even_with_other_flags() {
+        for flag in [
+            EventFlag::UserDropped,
+            EventFlag::KernelDropped,
+            EventFlag::EventIdsWrapped,
+        ] {
+            assert_eq!(flag.scan_type(), ScanType::ReScan);
+            assert_eq!(
+                (flag | EventFlag::HistoryDone | EventFlag::ItemIsDir).scan_type(),
+                ScanType::ReScan
+            );
+        }
     }
 }

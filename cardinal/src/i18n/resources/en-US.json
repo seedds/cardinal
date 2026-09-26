@@ -81,7 +81,8 @@
     "resultsCount_other": "{{formatted}} results",
     "duration": "{{value}}ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Results • Duration"
+    "resultsTitle": "Results • Duration",
+    "skippedCloudFiles": "{{formatted}} cloud-only files skipped"
   },
   "app": {
     "fullDiskAccess": {

@@ -12,6 +12,7 @@ type StatusBarProps = {
   lifecycleState: AppLifecycleStatus;
   searchDurationMs: number | null;
   resultCount: number | null;
+  skippedCloudFiles?: number;
   activeTab: StatusTabKey;
   onTabChange: (tab: StatusTabKey) => void;
   onRequestRescan: () => void;
@@ -32,6 +33,7 @@ const StatusBar = ({
   lifecycleState,
   searchDurationMs,
   resultCount,
+  skippedCloudFiles = 0,
   activeTab,
   onTabChange,
   onRequestRescan,
@@ -191,6 +193,16 @@ const StatusBar = ({
           <span className="status-label">{t('statusBar.searchLabel')}</span>
           <span className="status-value" title={t('statusBar.resultsTitle')}>
             {searchDisplay}
+            {skippedCloudFiles > 0 && (
+              <>
+                {' '}
+                ·{' '}
+                {t('statusBar.skippedCloudFiles', {
+                  count: skippedCloudFiles,
+                  formatted: skippedCloudFiles.toLocaleString(),
+                })}
+              </>
+            )}
           </span>
         </div>
       </div>

@@ -69,6 +69,20 @@ describe('useFileSearch', () => {
     expect(result.current.state.resultCount).toBe(backendResults.length);
   });
 
+  it('reports skipped cloud files and clears the count on the next complete search', async () => {
+    mockedInvoke.mockImplementation((command: string) =>
+      Promise.resolve(
+        command === 'get_app_status' ? 'Ready' : { ...searchResponse(), skippedCloudFiles: 3 },
+      ),
+    );
+    const { result } = await renderReadySearchHook();
+    expect(result.current.state.skippedCloudFiles).toBe(3);
+    mockSearchSuccess();
+    act(() => result.current.queueSearch('local', { immediate: true }));
+    await waitFor(() => expect(result.current.state.currentQuery).toBe('local'));
+    expect(result.current.state.skippedCloudFiles).toBe(0);
+  });
+
   it('ignores results when backend returns CANCELLED status', async () => {
     const initialResults = [1, 2, 3] as SlabIndex[];
     mockSearchSuccess(initialResults);

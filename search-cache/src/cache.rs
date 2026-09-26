@@ -38,6 +38,11 @@ pub struct SearchCache {
     rescan_count: u64,
     pub(crate) name_index: NameIndex,
     stop: &'static AtomicBool,
+    pub(crate) skipped_cloud_files: std::sync::Mutex<HashSet<SlabIndex>>,
+    #[cfg(test)]
+    pub(crate) content_metadata_flags: std::collections::HashMap<PathBuf, u32>,
+    #[cfg(test)]
+    pub(crate) content_open_count: std::sync::atomic::AtomicUsize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -54,17 +59,24 @@ pub struct SearchOutcome {
     /// `Some(vec![])` means completed search with zero matches.
     pub nodes: Option<Vec<SlabIndex>>,
     pub highlights: Vec<String>,
+    /// Unique cloud-only files not read while evaluating content filters.
+    pub skipped_cloud_files: Vec<SlabIndex>,
 }
 
 impl SearchOutcome {
     fn new(nodes: Option<Vec<SlabIndex>>, highlights: Vec<String>) -> Self {
-        Self { nodes, highlights }
+        Self {
+            nodes,
+            highlights,
+            skipped_cloud_files: Vec::new(),
+        }
     }
 
     fn cancelled() -> Self {
         Self {
             nodes: None,
             highlights: vec![],
+            skipped_cloud_files: vec![],
         }
     }
 
@@ -76,10 +88,12 @@ impl SearchOutcome {
         let SearchOutcome {
             nodes: primary_nodes,
             highlights: primary_highlights,
+            skipped_cloud_files: primary_skipped,
         } = self;
         let SearchOutcome {
             nodes: secondary_nodes,
             highlights: secondary_highlights,
+            skipped_cloud_files: secondary_skipped,
         } = other;
 
         let (Some(primary_nodes), Some(secondary_nodes)) = (primary_nodes, secondary_nodes) else {
@@ -89,7 +103,11 @@ impl SearchOutcome {
         let merged_nodes = Self::merge_preserve_order(primary_nodes, secondary_nodes);
         let merged_highlights =
             Self::merge_preserve_order(primary_highlights, secondary_highlights);
-        Self::new(Some(merged_nodes), merged_highlights)
+        Self {
+            nodes: Some(merged_nodes),
+            highlights: merged_highlights,
+            skipped_cloud_files: Self::merge_preserve_order(primary_skipped, secondary_skipped),
+        }
     }
 
     fn merge_preserve_order<T>(lhs: Vec<T>, rhs: Vec<T>) -> Vec<T>
@@ -287,6 +305,11 @@ impl SearchCache {
             rescan_count,
             name_index,
             stop: cancel,
+            skipped_cloud_files: Default::default(),
+            #[cfg(test)]
+            content_metadata_flags: Default::default(),
+            #[cfg(test)]
+            content_open_count: Default::default(),
         }
     }
 
@@ -310,6 +333,11 @@ impl SearchCache {
             rescan_count: 0,
             name_index: NameIndex::default(),
             stop: cancel,
+            skipped_cloud_files: Default::default(),
+            #[cfg(test)]
+            content_metadata_flags: Default::default(),
+            #[cfg(test)]
+            content_open_count: Default::default(),
         }
     }
 
@@ -439,7 +467,11 @@ impl SearchCache {
             return Ok(SearchOutcome::cancelled());
         }
 
-        let SearchOutcome { nodes, highlights } = outcome;
+        let SearchOutcome {
+            nodes,
+            highlights,
+            skipped_cloud_files,
+        } = outcome;
         let Some(nodes) = nodes else {
             return Ok(SearchOutcome::cancelled());
         };
@@ -456,7 +488,11 @@ impl SearchCache {
         }
 
         let scoped_nodes = SearchOutcome::merge_preserve_order(Vec::new(), scoped_nodes);
-        Ok(SearchOutcome::new(Some(scoped_nodes), highlights))
+        Ok(SearchOutcome {
+            nodes: Some(scoped_nodes),
+            highlights,
+            skipped_cloud_files,
+        })
     }
 
     fn search_with_directory_scope(
@@ -470,6 +506,7 @@ impl SearchCache {
         let SearchOutcome {
             nodes: scope_nodes,
             highlights: scope_highlights,
+            skipped_cloud_files: scope_skipped,
         } = scope;
         let Some(scope_nodes) = scope_nodes else {
             return Ok(SearchOutcome::cancelled());
@@ -480,13 +517,21 @@ impl SearchCache {
         let SearchOutcome {
             nodes: primary_nodes,
             highlights: primary_highlights,
+            skipped_cloud_files: primary_skipped,
         } = primary;
         let Some(primary_nodes) = primary_nodes else {
             return Ok(SearchOutcome::cancelled());
         };
 
         let highlights = SearchOutcome::merge_preserve_order(scope_highlights, primary_highlights);
-        Ok(SearchOutcome::new(Some(primary_nodes), highlights))
+        Ok(SearchOutcome {
+            nodes: Some(primary_nodes),
+            highlights,
+            skipped_cloud_files: SearchOutcome::merge_preserve_order(
+                scope_skipped,
+                primary_skipped,
+            ),
+        })
     }
 
     fn search_with_query_line_transform_base(
@@ -504,9 +549,20 @@ impl SearchCache {
         unquoted.expr = transform(unquoted.expr);
         let optimized = optimize_query(unquoted);
         let search_time = Instant::now();
+        self.skipped_cloud_files.get_mut().unwrap().clear();
         let result = self.evaluate_expr(&optimized.expr, base, options, cancellation_token);
+        let skipped_cloud_files = self
+            .skipped_cloud_files
+            .get_mut()
+            .unwrap()
+            .drain()
+            .collect();
         info!("Search time: {:?}", search_time.elapsed());
-        result.map(|nodes| SearchOutcome::new(nodes, highlights))
+        result.map(|nodes| SearchOutcome {
+            nodes,
+            highlights,
+            skipped_cloud_files,
+        })
     }
 
     // Why this exists:
@@ -824,6 +880,8 @@ impl SearchCache {
             rescan_count,
             name_index,
             stop: _,
+            skipped_cloud_files: _,
+            ..
         } = self;
         let (path, ignore_paths, include_paths, slab_root, slab) = file_nodes.into_parts();
         let name_index = name_index.into_persistent();
@@ -2983,6 +3041,66 @@ mod tests {
     }
 
     #[test]
+    fn content_filter_order_limits_file_opens() {
+        let dir = TempDir::new("content_order").unwrap();
+        fs::write(dir.path().join("match.txt"), "needle").unwrap();
+        fs::write(dir.path().join("other.bin"), "needle").unwrap();
+        let mut cache = SearchCache::walk_fs(dir.path());
+        for query in [
+            "content:needle ext:txt",
+            "ext:txt content:needle",
+            "!content:missing ext:txt",
+            "(content:needle | absent) ext:txt",
+        ] {
+            cache.content_open_count.store(0, Ordering::Relaxed);
+            assert_eq!(cache.search(query).unwrap().len(), 1);
+            assert_eq!(
+                cache.content_open_count.load(Ordering::Relaxed),
+                1,
+                "{query}"
+            );
+        }
+    }
+
+    #[test]
+    fn cloud_content_is_unknown_and_counted_once_per_search() {
+        let dir = TempDir::new("cloud_content").unwrap();
+        let cloud = dir.path().join("cloud.txt");
+        fs::write(&cloud, "needle").unwrap();
+        fs::write(dir.path().join("local.txt"), "needle").unwrap();
+        let mut cache = SearchCache::walk_fs(dir.path());
+        cache.content_metadata_flags.insert(cloud, 0x40000000);
+        for query in [
+            "ext:txt content:needle",
+            "ext:txt !content:missing",
+            "ext:txt (content:needle | content:missing)",
+        ] {
+            let outcome = cache
+                .search_with_options(query, SearchOptions::default(), CancellationToken::noop())
+                .unwrap();
+            assert_eq!(outcome.nodes.unwrap().len(), 1, "{query}");
+            assert_eq!(outcome.skipped_cloud_files.len(), 1, "{query}");
+        }
+        let outcome = cache
+            .search_with_options(
+                "ext:txt",
+                SearchOptions::default(),
+                CancellationToken::noop(),
+            )
+            .unwrap();
+        assert_eq!(outcome.nodes.unwrap().len(), 2);
+        assert!(outcome.skipped_cloud_files.is_empty());
+        // A separate successful filename branch still makes a cloud file a result.
+        assert_eq!(
+            cache
+                .search("(content:needle | cloud) !absent ext:txt")
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
     fn content_filter_matches_across_chunks() {
         let temp_dir = TempDir::new("content_filter_matches_across_chunks").unwrap();
         let dir = temp_dir.path();
@@ -3404,6 +3522,66 @@ mod tests {
         assert_eq!(cache.search("new_file").unwrap().len(), 3);
         assert_eq!(cache.search("good.rs").unwrap().len(), 1);
         assert_eq!(cache.search("foo").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn recovery_reconciles_mixed_batches_without_checkpointing_lost_changes() {
+        for flag in [
+            EventFlag::RootChanged,
+            EventFlag::UserDropped,
+            EventFlag::KernelDropped,
+            EventFlag::EventIdsWrapped,
+            EventFlag::ItemModified,
+        ] {
+            let temp_dir = TempDir::new("event_recovery").unwrap();
+            let removed = temp_dir.path().join("removed.txt");
+            fs::write(&removed, "old").unwrap();
+            let mut cache = SearchCache::walk_fs(temp_dir.path());
+            let checkpoint = cache.last_event_id();
+            fs::remove_file(&removed).unwrap();
+            fs::write(temp_dir.path().join("unreported.txt"), "new").unwrap();
+
+            assert!(matches!(
+                cache.handle_fs_events(vec![
+                    FsEvent {
+                        path: removed,
+                        id: checkpoint + 1,
+                        flag: EventFlag::ItemRemoved | EventFlag::ItemIsFile
+                    },
+                    FsEvent {
+                        path: temp_dir.path().to_path_buf(),
+                        id: checkpoint + 2,
+                        flag
+                    },
+                ]),
+                Err(HandleFSEError::Rescan)
+            ));
+            assert_eq!(cache.last_event_id(), checkpoint);
+
+            let (mut root, mut ignores, mut includes) = Default::default();
+            let walk = cache.walk_data(
+                &mut root,
+                &mut ignores,
+                &mut includes,
+                CancellationToken::noop(),
+            );
+            cache.rescan_with_walk_data(&walk).unwrap();
+            assert!(cache.search("removed.txt").unwrap().is_empty());
+            assert_eq!(cache.search("unreported.txt").unwrap().len(), 1);
+
+            let db = temp_dir.path().join("recovered.db");
+            cache.flush_snapshot_to_file(&db).unwrap();
+            let mut restored = SearchCache::try_read_persistent_cache(
+                temp_dir.path(),
+                &db,
+                &vec![],
+                &vec![],
+                &NEVER_STOPPED,
+            )
+            .unwrap();
+            assert!(restored.search("removed.txt").unwrap().is_empty());
+            assert_eq!(restored.search("unreported.txt").unwrap().len(), 1);
+        }
     }
 
     #[test]

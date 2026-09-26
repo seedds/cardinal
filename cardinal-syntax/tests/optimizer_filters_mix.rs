@@ -3,6 +3,33 @@ use cardinal_syntax::*;
 use common::*;
 
 #[test]
+fn content_filters_run_after_narrowing_filters() {
+    for query in [
+        "content:needle type:doc tag:work ext:txt",
+        "type:doc content:needle tag:work ext:txt",
+    ] {
+        let expr = parse_ok(query);
+        let parts = as_and(&expr);
+        filter_is_kind(&parts[0], &FilterKind::Type);
+        filter_is_kind(&parts[1], &FilterKind::Ext);
+        filter_is_kind(&parts[2], &FilterKind::Tag);
+        filter_is_kind(&parts[3], &FilterKind::Content);
+    }
+}
+
+#[test]
+fn content_in_boolean_operands_runs_after_narrowing_filters() {
+    for query in [
+        "!content:needle ext:txt",
+        "(content:needle | report) ext:txt",
+        "!(content:needle | report) ext:txt",
+    ] {
+        let expr = parse_ok(query);
+        filter_is_kind(&as_and(&expr)[0], &FilterKind::Ext);
+    }
+}
+
+#[test]
 fn block_06_filters_mix() {
     let s1 = parse_ok("folder:src ext:rs regex:.*\\.rs$");
     let p1 = as_and(&s1);
@@ -227,8 +254,9 @@ fn tag_filter_with_all_filter_types() {
         .count();
     assert_eq!(tag_count, 1);
 
-    // Tag filter should be the final element
-    let tail_start = parts.len() - tag_count;
+    // Content reads follow even the expensive tag filter.
+    filter_is_kind(parts.last().unwrap(), &FilterKind::Content);
+    let tail_start = parts.len() - tag_count - 1;
     filter_is_kind(&parts[tail_start], &FilterKind::Tag);
 
     // Everything before the tail must not be a tag filter
@@ -535,8 +563,9 @@ fn all_filter_types_comprehensive() {
     word_is(&parts[3], "word1");
     word_is(&parts[4], "word2");
 
-    // Tags should be the final three elements
-    let tail_start = parts.len() - 3;
+    // Tags follow metadata filters, with content reads last.
+    filter_is_kind(parts.last().unwrap(), &FilterKind::Content);
+    let tail_start = parts.len() - 4;
     filter_is_kind(&parts[tail_start], &FilterKind::Tag);
     filter_is_kind(&parts[tail_start + 1], &FilterKind::Tag);
     filter_is_kind(&parts[tail_start + 2], &FilterKind::Tag);

@@ -213,7 +213,7 @@ fn handle_event_watcher_events(
     events: Vec<FsEvent>,
     history_ready: &mut bool,
     processed_events: &mut usize,
-) {
+) -> bool {
     *processed_events += events.len();
 
     emit_status_bar_update(
@@ -238,9 +238,9 @@ fn handle_event_watcher_events(
         }
     }
 
-    let handle_result = cache.handle_fs_events(events);
-    if let Err(HandleFSEError::Rescan) = handle_result {
-        info!("!!!!!!!!!! Rescan triggered !!!!!!!!");
+    let needs_rescan = matches!(cache.handle_fs_events(events), Err(HandleFSEError::Rescan));
+    if needs_rescan {
+        info!("Filesystem events require index recovery");
         emit_status_bar_update(
             app_handle,
             cache.get_total_files(),
@@ -252,6 +252,7 @@ fn handle_event_watcher_events(
     if *history_ready && !snapshots.is_empty() {
         forward_new_events(app_handle, &snapshots);
     }
+    needs_rescan
 }
 
 fn handle_icon_viewport_update(
@@ -407,13 +408,27 @@ pub fn run_background_event_loop(
             }
             recv(event_watcher) -> events => {
                 let events = events.expect("Event stream closed");
-                handle_event_watcher_events(
+                let needs_rescan = handle_event_watcher_events(
                     app_handle,
                     &mut cache,
                     events,
                     &mut history_ready,
                     &mut processed_events,
                 );
+                if needs_rescan {
+                    // Rebuild once for the whole batch. The new cache checkpoints the
+                    // start of the walk, and the replacement watcher replays later events.
+                    perform_rescan(
+                        app_handle,
+                        &mut cache,
+                        &mut event_watcher,
+                        &watch_root,
+                        fse_latency_secs,
+                        &mut history_ready,
+                        &mut processed_events,
+                        CancellationToken::current_scan(),
+                    );
+                }
             }
         }
     }

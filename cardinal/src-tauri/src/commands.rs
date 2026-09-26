@@ -225,6 +225,7 @@ pub struct SearchResponse {
     pub results: Vec<SlabIndex>,
     pub highlights: Vec<String>,
     pub status_code: u8,
+    pub skipped_cloud_files: usize,
 }
 
 impl SearchResponse {
@@ -313,21 +314,28 @@ pub async fn search(
             return Err(format!("Failed to receive search result: {e:?}"));
         }
     }
-    .map(|SearchOutcome { nodes, highlights }| {
-        let (status_code, results) = match nodes {
-            Some(list) => (SearchResponse::OK, list),
-            None => {
-                let version = cancellation_token.version();
-                info!("Search {version} was cancelled");
-                (SearchResponse::CANCELLED, vec![])
+    .map(
+        |SearchOutcome {
+             nodes,
+             highlights,
+             skipped_cloud_files,
+         }| {
+            let (status_code, results) = match nodes {
+                Some(list) => (SearchResponse::OK, list),
+                None => {
+                    let version = cancellation_token.version();
+                    info!("Search {version} was cancelled");
+                    (SearchResponse::CANCELLED, vec![])
+                }
+            };
+            SearchResponse {
+                results,
+                highlights,
+                status_code,
+                skipped_cloud_files: skipped_cloud_files.len(),
             }
-        };
-        SearchResponse {
-            results,
-            highlights,
-            status_code,
-        }
-    })
+        },
+    )
     .map_err(|e| format!("Failed to process search result: {e:?}"))
 }
 

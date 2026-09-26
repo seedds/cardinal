@@ -437,6 +437,7 @@ function App() {
           lifecycleState={lifecycleState}
           searchDurationMs={durationMs}
           resultCount={resultCount}
+          skippedCloudFiles={state.skippedCloudFiles}
           activeTab={activeTab}
           onTabChange={onTabChange}
           onRequestRescan={requestRescan}

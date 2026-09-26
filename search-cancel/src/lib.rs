@@ -44,6 +44,14 @@ impl CancellationToken {
         }
     }
 
+    /// Observe the current scan generation without cancelling queued user requests.
+    pub fn current_scan() -> Self {
+        Self {
+            version: ACTIVE_SCAN_VERSION.load(Ordering::SeqCst),
+            active_version: &ACTIVE_SCAN_VERSION,
+        }
+    }
+
     pub fn is_cancelled(&self) -> Option<()> {
         if self.version != self.active_version.load(Ordering::Relaxed) {
             None
@@ -170,5 +178,17 @@ mod tests {
             search_v1.is_cancelled().is_none(),
             "search token should still be governed by search version updates"
         );
+    }
+
+    #[test]
+    fn automatic_recovery_observes_without_invalidating_user_scan() {
+        let _guard = lock_versions();
+        reset_versions();
+        let user_scan = CancellationToken::new_scan();
+        let recovery = CancellationToken::current_scan();
+        assert!(user_scan.is_cancelled().is_some());
+        assert_eq!(recovery.version(), user_scan.version());
+        let _new_user_scan = CancellationToken::new_scan();
+        assert!(recovery.is_cancelled().is_none());
     }
 }

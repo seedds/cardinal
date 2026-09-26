@@ -55,8 +55,8 @@ impl Query {
 /// - Removes `Expr::Empty` operands from conjunctions (returning `Expr::Empty`
 ///   or the lone operand when appropriate).
 /// - Reorders filters by cost: `infolder:` and `parent:` first (same priority),
-///   other filters next, and `tag:` always last. Non-filters stay between the
-///   scope filters and the remaining filter tail.
+///   other filters next, then `tag:`, and finally content-reading expressions.
+///   Other non-filters stay between the scope filters and the remaining filter tail.
 /// - Collapses any OR chain containing `Expr::Empty` into a single
 ///   `Expr::Empty`, matching Cardinal's "empty means whole universe" semantics.
 ///
@@ -128,13 +128,17 @@ fn optimize_or(parts: Vec<Expr>) -> Expr {
 /// - 0: Scope filters (`infolder:`, `parent:`) - narrow search space first
 /// - 1: Non-filter terms (words, phrases, boolean ops) - cheap string matching
 /// - 2: Generic filters (`ext:`, `type:`, `size:`, etc.) - moderate cost
-/// - 3: Tag filters (`tag:`) - expensive metadata access, runs last
+/// - 3: Tag filters (`tag:`) - expensive metadata access
+/// - 4: Expressions containing `content:` - file reads, runs last
 fn reorder_by_priority(parts: &mut Vec<Expr>) {
     if parts.len() <= 1 {
         return;
     }
 
     let priority = |expr: &Expr| -> u8 {
+        if contains_content_filter(expr) {
+            return 4;
+        }
         match expr {
             Expr::Term(Term::Filter(filter)) => match filter.kind {
                 FilterKind::InFolder | FilterKind::Parent => 0,
@@ -153,6 +157,15 @@ fn reorder_by_priority(parts: &mut Vec<Expr>) {
     keyed.sort_by_key(|(prio, _)| *prio);
 
     parts.extend(keyed.into_iter().map(|(_, expr)| expr));
+}
+
+fn contains_content_filter(expr: &Expr) -> bool {
+    match expr {
+        Expr::Term(Term::Filter(filter)) => filter.kind == FilterKind::Content,
+        Expr::Not(inner) => contains_content_filter(inner),
+        Expr::And(parts) | Expr::Or(parts) => parts.iter().any(contains_content_filter),
+        _ => false,
+    }
 }
 
 /// Logical structure for Everything queries.

@@ -24,6 +24,7 @@ type SearchState = {
   initialFetchCompleted: boolean;
   durationMs: number | null;
   resultCount: number;
+  skippedCloudFiles: number;
   searchError: SearchError;
   lifecycleState: AppLifecycleStatus;
 };
@@ -57,6 +58,7 @@ type SearchAction =
         directoryQuery: string;
         duration: number;
         count: number;
+        skippedCloudFiles: number;
         highlightTerms: string[];
       };
     }
@@ -83,6 +85,7 @@ const initialSearchState: SearchState = {
   initialFetchCompleted: false,
   durationMs: null,
   resultCount: 0,
+  skippedCloudFiles: 0,
   searchError: null,
   lifecycleState: 'Initializing',
 };
@@ -156,6 +159,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         initialFetchCompleted: true,
         durationMs: action.payload.duration,
         resultCount: action.payload.count,
+        skippedCloudFiles: action.payload.skippedCloudFiles,
         searchError: null,
       };
     case 'SEARCH_FAILURE':
@@ -166,6 +170,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         initialFetchCompleted: true,
         durationMs: action.payload.duration,
         resultCount: 0,
+        skippedCloudFiles: 0,
         highlightTerms: [],
       };
     case 'SEARCH_CANCELLED':
@@ -330,6 +335,7 @@ export function useFileSearch(): UseFileSearchResult {
           directoryQuery,
           duration,
           count: searchResults.length,
+          skippedCloudFiles: rawResults.skippedCloudFiles ?? 0,
           highlightTerms,
         },
       });

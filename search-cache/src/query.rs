@@ -15,6 +15,8 @@ use query_segmentation::query_segmentation;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use regex::RegexBuilder;
 use search_cancel::CancellationToken;
+#[cfg(target_os = "macos")]
+use std::os::macos::fs::MetadataExt;
 use std::{collections::BTreeSet, fs::File, io::Read, path::Path};
 
 pub(crate) const CONTENT_BUFFER_BYTES: usize = 64 * 1024;
@@ -113,13 +115,25 @@ impl SearchCache {
         let Some(mut universe) = self.nodes_from_base_ref(base, token) else {
             return Ok(None);
         };
-        if let Some(negated) = self.evaluate_expr(inner, base, options, token)? {
+        let previous_skipped = std::mem::take(self.skipped_cloud_files.get_mut().unwrap());
+        let evaluated = self.evaluate_expr(inner, base, options, token);
+        let inner_skipped = std::mem::replace(
+            self.skipped_cloud_files.get_mut().unwrap(),
+            previous_skipped,
+        );
+        self.skipped_cloud_files
+            .get_mut()
+            .unwrap()
+            .extend(inner_skipped.iter().copied());
+        if let Some(negated) = evaluated? {
             if difference_in_place(&mut universe, &negated, token).is_none() {
                 return Ok(None);
             }
         } else {
             return Ok(None);
         }
+        // An unread cloud file is unknown, not a confirmed non-match.
+        universe.retain(|index| !inner_skipped.contains(index));
         Ok(Some(universe))
     }
 
@@ -809,6 +823,13 @@ impl SearchCache {
             .filter_map(|index| self.node_path(index).map(|path| (index, path)))
             .par_bridge()
             .filter_map(|(index, path)| {
+                // Reading a dataless file materializes it. Inspect fresh metadata before
+                // opening it; cached metadata may predate eviction by the cloud provider.
+                #[cfg(target_os = "macos")]
+                if self.content_file_is_dataless(&path) {
+                    self.skipped_cloud_files.lock().unwrap().insert(index);
+                    return None;
+                }
                 self.node_content_matches(&path, needle, options.case_insensitive, token)?
                     .then_some(index)
             })
@@ -895,6 +916,18 @@ impl SearchCache {
         Ok(token.is_cancelled().map(|()| matched_indices))
     }
 
+    #[cfg(target_os = "macos")]
+    fn content_file_is_dataless(&self, path: &Path) -> bool {
+        // SF_DATALESS: opening the file would ask its provider to download it.
+        const SF_DATALESS: u32 = 0x40000000;
+        #[cfg(test)]
+        if let Some(flags) = self.content_metadata_flags.get(path) {
+            return flags & SF_DATALESS != 0;
+        }
+        path.symlink_metadata()
+            .is_ok_and(|metadata| metadata.st_flags() & SF_DATALESS != 0)
+    }
+
     /// user need to ensure that needle is lowercased when case_insensitive is set
     fn node_content_matches(
         &self,
@@ -905,6 +938,9 @@ impl SearchCache {
     ) -> Option<bool> {
         token.is_cancelled()?;
 
+        #[cfg(test)]
+        self.content_open_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let Ok(mut file) = File::open(path) else {
             return Some(false);
         };
