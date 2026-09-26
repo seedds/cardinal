@@ -452,6 +452,66 @@ pub async fn open_in_finder(path: String) {
 }
 
 #[tauri::command]
+pub async fn trash_files(paths: Vec<String>) -> Result<(), String> {
+    for path in paths {
+        let output = Command::new("osascript")
+            .args(["-e", "on run argv\n tell application \"Finder\" to delete (POSIX file (item 1 of argv))\nend run", "--", &path])
+            .output().map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(format!(
+                "Could not trash {path}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn rename_file(path: String, name: String) -> Result<(), String> {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt};
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') || name.contains('\0') {
+        return Err("Enter a valid filename without path separators".into());
+    }
+    let source = std::path::Path::new(&path);
+    let parent = source
+        .parent()
+        .filter(|_| source.is_absolute() && source.file_name().is_some())
+        .ok_or("Cannot rename this path")?;
+    let destination = parent.join(name);
+    if source == destination {
+        return Ok(());
+    }
+    let from = CString::new(source.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
+    let to = CString::new(destination.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
+    // RENAME_EXCL atomically refuses to replace an existing destination.
+    if unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) } != 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reveal_in_double_commander(path: String) -> Result<(), String> {
+    let output = Command::new("open")
+        .args([
+            "-n",
+            "-a",
+            "Double Commander",
+            "--args",
+            "--client",
+            "-T",
+            &path,
+        ])
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into_owned());
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn open_path(path: String) {
     if let Err(e) = Command::new("open").arg(&path).spawn() {
         error!("Failed to open path: {e}");

@@ -15,6 +15,7 @@ type UseContextMenuResult = {
 export function useContextMenu(
   autoFitColumns: (() => void) | null = null,
   onQuickLookRequest?: () => void | Promise<void>,
+  fileActions?: { trash: (paths: string[]) => void; rename: (paths: string[]) => void },
 ): UseContextMenuResult {
   const { t } = useTranslation();
   const writeClipboard = useCallback((text: string) => {
@@ -96,9 +97,32 @@ export function useContextMenu(
         });
       }
 
+      items.push({
+        id: 'context_menu.double_commander',
+        text: 'Reveal in Double Commander',
+        action: () => {
+          void invoke('reveal_in_double_commander', { path: targetPaths[0] }).catch((error) =>
+            window.alert(String(error)),
+          );
+        },
+      });
+      if (fileActions) {
+        items.push({
+          id: 'context_menu.rename',
+          text: 'Rename…',
+          enabled: targetPaths.length === 1,
+          action: () => fileActions.rename(targetPaths),
+        });
+        items.push({
+          id: 'context_menu.trash',
+          text: 'Move to Trash',
+          action: () => fileActions.trash(targetPaths),
+        });
+      }
+
       return items;
     },
-    [onQuickLookRequest, t, writeClipboard],
+    [onQuickLookRequest, t, writeClipboard, fileActions],
   );
 
   const buildHeaderMenuItems = useCallback((): MenuItemOptions[] => {

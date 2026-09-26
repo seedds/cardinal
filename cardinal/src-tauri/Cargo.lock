@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "cardinal"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -391,6 +391,7 @@ dependencies = [
  "crossbeam-channel",
  "fs-icon",
  "fswalk",
+ "libc",
  "objc2",
  "objc2-app-kit",
  "objc2-foundation",

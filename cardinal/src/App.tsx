@@ -10,6 +10,7 @@ import StatusBar from './components/StatusBar';
 import type { SearchResultItem } from './types/search';
 import { useColumnResize } from './hooks/useColumnResize';
 import { useContextMenu } from './hooks/useContextMenu';
+import { useFileActions } from './hooks/useFileActions';
 import { useFileSearch } from './hooks/useFileSearch';
 import { useEventColumnWidths } from './hooks/useEventColumnWidths';
 import { useRecentFSEvents } from './hooks/useRecentFSEvents';
@@ -134,6 +135,7 @@ function App() {
     eventFilterQuery,
   });
 
+  const fileActions = useFileActions();
   const getQuickLookPaths = useCallback(
     () => (activeTab === 'files' ? selectedPaths : []),
     [activeTab, selectedPaths],
@@ -146,7 +148,7 @@ function App() {
   const {
     showContextMenu: showFilesContextMenu,
     showHeaderContextMenu: showFilesHeaderContextMenu,
-  } = useContextMenu(autoFitColumns, toggleQuickLook);
+  } = useContextMenu(autoFitColumns, toggleQuickLook, fileActions);
 
   const {
     showContextMenu: showEventsContextMenu,
@@ -183,6 +185,10 @@ function App() {
   const refreshSearchResults = useCallback(() => {
     queueSearch(currentQuery, { immediate: true });
   }, [currentQuery, queueSearch]);
+
+  useEffect(() => {
+    if (processedEvents > 0) refreshSearchResults();
+  }, [processedEvents, refreshSearchResults]);
 
   const {
     isPreferencesOpen,
@@ -228,6 +234,8 @@ function App() {
     clearSelection,
     navigateSelection,
     triggerQuickLook,
+    trashFiles: fileActions.trash,
+    renameFile: fileActions.rename,
   });
 
   useFilesTabEffects({
@@ -371,6 +379,7 @@ function App() {
 
   return (
     <>
+      {fileActions.dialog}
       <main className="container" aria-hidden={showFullDiskAccessOverlay || isPreferencesOpen}>
         <SearchBar
           inputRef={searchInputRef}

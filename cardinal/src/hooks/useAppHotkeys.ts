@@ -24,6 +24,8 @@ type UseAppHotkeysOptions = {
   clearSelection: () => void;
   navigateSelection: (delta: 1 | -1, options?: MoveSelectionOptions) => void;
   triggerQuickLook: () => void;
+  trashFiles?: (paths: string[]) => void;
+  renameFile?: (paths: string[]) => void;
 };
 
 const QUICK_LOOK_KEYCODE_DOWN = 125;
@@ -46,6 +48,8 @@ export function useAppHotkeys({
   clearSelection,
   navigateSelection,
   triggerQuickLook,
+  trashFiles,
+  renameFile,
 }: UseAppHotkeysOptions): void {
   const keyboardStateRef = useRef<{ activeTab: StatusTabKey; activeRowIndex: number | null }>({
     activeTab,
@@ -107,6 +111,14 @@ export function useAppHotkeys({
     }
 
     const isSpaceKey = event.code === 'Space' || event.key === ' ';
+    if ((event.key === 'F8' || event.key === 'F2') && !hasModifierKey(event)) {
+      event.preventDefault();
+      if (!event.repeat) {
+        if (event.key === 'F8') trashFiles?.(selectedPaths);
+        else renameFile?.(selectedPaths);
+      }
+      return true;
+    }
     if (isSpaceKey) {
       if (event.repeat || !selectedIndicesRef.current.length) {
         return true;
