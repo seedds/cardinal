@@ -1,5 +1,5 @@
 use crate::{
-    commands::{NodeInfoRequest, SearchJob, WatchConfigUpdate},
+    commands::{NodeInfoMetadata, NodeInfoRequest, SearchJob, WatchConfigUpdate},
     lifecycle::{APP_QUIT, AppLifecycleState, load_app_state, update_app_state},
     search_activity,
     window_controls::is_main_window_foreground,
@@ -36,6 +36,10 @@ pub struct StatusBarUpdate {
 #[serde(rename_all = "camelCase")]
 pub struct IconPayload {
     pub slab_index: SlabIndex,
+    pub path: String,
+    pub metadata: Option<NodeInfoMetadata>,
+    pub request_id: u64,
+    pub thumbnail: bool,
     pub icon: String,
 }
 
@@ -154,6 +158,7 @@ fn handle_watch_config_update(
     };
 
     *cache = next_cache;
+    let _ = app_handle.emit("index_changed", ());
     *watch_root = next_watch_root.to_string();
     *event_watcher = if cache.is_noop() {
         EventWatcher::noop()
@@ -216,13 +221,6 @@ fn handle_event_watcher_events(
 ) -> bool {
     *processed_events += events.len();
 
-    emit_status_bar_update(
-        app_handle,
-        cache.get_total_files(),
-        *processed_events,
-        cache.rescan_count() as usize,
-    );
-
     let mut snapshots = Vec::with_capacity(events.len());
     for event in events.iter() {
         if event.flag == EventFlag::HistoryDone {
@@ -238,7 +236,17 @@ fn handle_event_watcher_events(
         }
     }
 
-    let needs_rescan = matches!(cache.handle_fs_events(events), Err(HandleFSEError::Rescan));
+    let outcome = cache.handle_fs_events(events);
+    let needs_rescan = matches!(outcome, Err(HandleFSEError::Rescan));
+    if matches!(outcome, Ok(true)) {
+        let _ = app_handle.emit("index_changed", ());
+    }
+    emit_status_bar_update(
+        app_handle,
+        cache.get_total_files(),
+        *processed_events,
+        cache.rescan_count() as usize,
+    );
     if needs_rescan {
         info!("Filesystem events require index recovery");
         emit_status_bar_update(
@@ -260,13 +268,19 @@ fn handle_icon_viewport_update(
     update: (u64, Vec<SlabIndex>),
     icon_update_tx: &Sender<IconPayload>,
 ) {
-    let (_request_id, viewport) = update;
+    let (request_id, viewport) = update;
 
     let nodes = cache.expand_file_nodes(&viewport);
     let icon_jobs: Vec<_> = viewport
         .into_iter()
         .zip(nodes)
-        .map(|(slab_index, SearchResultNode { path, .. })| (slab_index, path))
+        .map(|(slab_index, SearchResultNode { path, metadata })| {
+            (
+                slab_index,
+                path.to_string_lossy().into_owned(),
+                metadata.as_ref().map(NodeInfoMetadata::from_metadata),
+            )
+        })
         .collect();
 
     if icon_jobs.is_empty() {
@@ -275,27 +289,46 @@ fn handle_icon_viewport_update(
 
     icon_jobs
         .into_iter()
-        .map(|(slab_index, path)| (slab_index, path.to_string_lossy().into_owned()))
-        .filter(|(_, path)| {
-            // OneDrive
-            // iCloud Drive
-            // Google Drive
-            // Dropbox
-            !path.contains("OneDrive")
-                && !path.contains("com~apple~CloudDocs")
-                && !path.contains("Google Drive")
-                && !path.contains("Dropbox")
-        })
-        .for_each(|(slab_index, path)| {
+        .for_each(|(slab_index, path, metadata)| {
             let icon_update_tx = icon_update_tx.clone();
             spawn(move || {
+                // Ordinary icons load independently of row text and Quick Look.
+                if let Some(data) = fs_icon::icon_of_path_ns(&path) {
+                    let icon = format!(
+                        "data:image/png;base64,{}",
+                        general_purpose::STANDARD.encode(data)
+                    );
+                    let _ = icon_update_tx.send(IconPayload {
+                        slab_index,
+                        path: path.clone(),
+                        metadata: metadata.clone(),
+                        request_id,
+                        thumbnail: false,
+                        icon,
+                    });
+                }
+                // Avoid requesting thumbnails that could download cloud placeholders.
+                if path.contains("OneDrive")
+                    || path.contains("com~apple~CloudDocs")
+                    || path.contains("Google Drive")
+                    || path.contains("Dropbox")
+                {
+                    return;
+                }
                 if let Some(icon) = fs_icon::icon_of_path_ql(&path).map(|data| {
                     format!(
                         "data:image/png;base64,{}",
                         general_purpose::STANDARD.encode(&data)
                     )
                 }) {
-                    let _ = icon_update_tx.send(IconPayload { slab_index, icon });
+                    let _ = icon_update_tx.send(IconPayload {
+                        slab_index,
+                        path,
+                        metadata,
+                        request_id,
+                        thumbnail: true,
+                        icon,
+                    });
                 }
             });
         });
@@ -511,6 +544,7 @@ fn perform_rescan(
         stopped
     });
 
+    let _ = app_handle.emit("index_changed", ());
     *event_watcher = if stopped {
         EventWatcher::noop()
     } else {

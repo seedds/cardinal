@@ -974,7 +974,9 @@ impl SearchCache {
             .collect()
     }
 
-    pub fn handle_fs_events(&mut self, events: Vec<FsEvent>) -> Result<(), HandleFSEError> {
+    /// Returns whether a batch touched indexed data (including removals).
+    /// Ignored paths and history/no-op events still advance the event checkpoint.
+    pub fn handle_fs_events(&mut self, events: Vec<FsEvent>) -> Result<bool, HandleFSEError> {
         let max_event_id = events.iter().map(|e| e.id).max();
         // If rescan needed, early exit.
         if events.iter().any(|event| {
@@ -991,9 +993,12 @@ impl SearchCache {
             self.rescan_count = self.rescan_count.saturating_add(1);
             return Err(HandleFSEError::Rescan);
         }
+        let mut changed = false;
         for scan_path in scan_paths(events) {
             info!("Scanning path: {scan_path:?}");
+            let existed = self.node_index_for_path(&scan_path).is_some();
             let folder = self.scan_path_recursive(&scan_path);
+            changed |= existed || folder.is_some();
             if folder.is_some() {
                 info!("Node changed: {folder:?}");
             }
@@ -1001,7 +1006,7 @@ impl SearchCache {
         if let Some(max_event_id) = max_event_id {
             self.update_last_event_id(max_event_id);
         }
-        Ok(())
+        Ok(changed)
     }
 }
 
@@ -2849,11 +2854,39 @@ mod tests {
             flag: EventFlag::ItemCreated,
         }];
 
-        cache.handle_fs_events(mock_events).unwrap();
+        assert!(cache.handle_fs_events(mock_events).unwrap());
 
         assert_eq!(cache.file_nodes.len(), 2 + depth(temp_path));
         assert_eq!(cache.name_index.len(), 2 + depth(temp_path));
         assert_eq!(cache.search("new_file.txt").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn event_refresh_signal_tracks_ignored_paths_modifications_and_removals() {
+        let temp = TempDir::new("event_refresh_signal").unwrap();
+        let root = temp.path();
+        let ignored = root.join("ignored");
+        fs::create_dir(&ignored).unwrap();
+        let file = root.join("file.txt");
+        fs::write(&file, b"before").unwrap();
+        let mut cache = SearchCache::walk_fs_with_ignore(root, std::slice::from_ref(&ignored));
+        let mut send = |path: PathBuf, flag| {
+            let id = cache.last_event_id() + 1;
+            let changed = cache
+                .handle_fs_events(vec![FsEvent { path, id, flag }])
+                .unwrap();
+            assert_eq!(cache.last_event_id(), id);
+            changed
+        };
+        assert!(!send(root.to_path_buf(), EventFlag::HistoryDone));
+        fs::write(ignored.join("log.txt"), b"noise").unwrap();
+        assert!(!send(ignored.join("log.txt"), EventFlag::ItemCreated));
+        assert!(!send(root.join("never-indexed"), EventFlag::ItemRemoved));
+        fs::write(&file, b"after").unwrap();
+        assert!(send(file.clone(), EventFlag::ItemModified));
+        fs::remove_file(&file).unwrap();
+        assert!(send(file, EventFlag::ItemRemoved));
+        assert!(cache.search("file.txt").unwrap().is_empty());
     }
 
     #[test]

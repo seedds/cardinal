@@ -3,11 +3,22 @@ import { forwardRef } from 'react';
 import type { CSSProperties, ChangeEvent, FocusEventHandler, KeyboardEvent, Ref } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { invoke } from '@tauri-apps/api/core';
+
+const indexEvents = vi.hoisted(() => ({ changed: () => {} }));
+vi.mock('../runtime/tauriEventRuntime', () => ({
+  subscribeIndexChanged: (listener: () => void) => {
+    indexEvents.changed = listener;
+    return () => {};
+  },
+}));
 
 const mocks = vi.hoisted(() => ({
   filesTabContentProps: vi.fn(),
   navigateSearchHistory: vi.fn(),
   selectSingleRow: vi.fn(),
+  realSearch: false,
+  statusUpdate: null as null | ((files: number, events: number, errors: number) => void),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -93,38 +104,60 @@ vi.mock('../components/FSEventsPanel', () => ({
   }),
 }));
 
-vi.mock('../hooks/useFileSearch', () => ({
-  useFileSearch: () => ({
-    state: {
-      results: [101, 202],
-      resultsVersion: 1,
-      scannedFiles: 0,
-      processedEvents: 0,
-      rescanErrors: 0,
-      currentQuery: 'needle',
-      currentDirectoryQuery: 'Work/Docs',
-      highlightTerms: [],
-      showLoadingUI: false,
-      initialFetchCompleted: true,
-      durationMs: 0,
-      resultCount: 2,
-      searchError: null,
-      lifecycleState: 'Ready',
+vi.mock('../hooks/useFileSearch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../hooks/useFileSearch')>();
+  return {
+    useFileSearch: () => {
+      if (mocks.realSearch) {
+        const search = actual.useFileSearch();
+        mocks.statusUpdate = search.handleStatusUpdate;
+        return search;
+      }
+      return {
+        state: {
+          results: [101, 202],
+          resultsVersion: 1,
+          scannedFiles: 0,
+          processedEvents: 0,
+          rescanErrors: 0,
+          currentQuery: 'needle',
+          currentDirectoryQuery: 'Work/Docs',
+          highlightTerms: [],
+          showLoadingUI: false,
+          initialFetchCompleted: true,
+          durationMs: 0,
+          resultCount: 2,
+          searchError: null,
+          lifecycleState: 'Ready',
+        },
+        searchParams: {
+          query: 'needle',
+          directoryQuery: 'Work/Docs',
+          directoryScopeOpen: true,
+          caseSensitive: false,
+        },
+        updateSearchParams: vi.fn(),
+        queueSearch: vi.fn(),
+        queueDirectorySearch: vi.fn(),
+        queueDirectoryScopeOpen: vi.fn(),
+        handleStatusUpdate: vi.fn(),
+        setLifecycleState: vi.fn(),
+        requestRescan: vi.fn(),
+      };
     },
-    searchParams: {
-      query: 'needle',
-      directoryQuery: 'Work/Docs',
-      directoryScopeOpen: true,
-      caseSensitive: false,
-    },
-    updateSearchParams: vi.fn(),
-    queueSearch: vi.fn(),
-    queueDirectorySearch: vi.fn(),
-    queueDirectoryScopeOpen: vi.fn(),
-    handleStatusUpdate: vi.fn(),
-    setLifecycleState: vi.fn(),
-    requestRescan: vi.fn(),
-  }),
+  };
+});
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(async (command: string) =>
+    command === 'get_app_status'
+      ? 'Ready'
+      : {
+          results: [],
+          highlights: [],
+          statusCode: 0,
+        },
+  ),
 }));
 
 vi.mock('../hooks/useColumnResize', () => ({
@@ -252,7 +285,33 @@ vi.mock('../hooks/useStableEvent', () => ({
 describe('App search result keyboard navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.realSearch = false;
     mocks.navigateSearchHistory.mockReturnValue(null);
+  });
+
+  it('preserves typing and clearing when filesystem updates arrive', async () => {
+    mocks.realSearch = true;
+    render(<App />);
+    await act(async () => {});
+    const input = screen.getByTestId('search-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'new query' } });
+    await act(async () => {
+      mocks.statusUpdate?.(100, 1, 0);
+      indexEvents.changed();
+    });
+    expect(input.value).toBe('new query');
+    fireEvent.change(input, { target: { value: 'new quer' } });
+    await act(async () => {
+      mocks.statusUpdate?.(100, 2, 0);
+      indexEvents.changed();
+    });
+    expect(input.value).toBe('new quer');
+    fireEvent.change(input, { target: { value: '' } });
+    await act(async () => {
+      mocks.statusUpdate?.(100, 3, 0);
+      indexEvents.changed();
+    });
+    expect(input.value).toBe('');
   });
 
   it('passes main query and folder scope separately to the files tab content', () => {
@@ -261,6 +320,30 @@ describe('App search result keyboard navigation', () => {
     expect(mocks.filesTabContentProps).toHaveBeenLastCalledWith({
       currentDirectoryQuery: 'Work/Docs',
       currentQuery: 'needle',
+    });
+  });
+
+  it('submits pending typing on Enter and reuses that request on a repeated Enter', async () => {
+    mocks.realSearch = true;
+    render(<App />);
+    await act(async () => {});
+    const input = screen.getByTestId('search-input');
+    let finish!: (value: unknown) => void;
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.mocked(invoke).mockClear();
+    fireEvent.change(input, { target: { value: 'needle' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ results: [], highlights: [], statusCode: 0 }));
+    expect(mocks.filesTabContentProps).toHaveBeenLastCalledWith({
+      currentQuery: 'needle',
+      currentDirectoryQuery: '',
     });
   });
 

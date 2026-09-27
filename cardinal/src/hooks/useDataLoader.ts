@@ -6,7 +6,18 @@ import type { SlabIndex } from '../types/slab';
 import type { IconUpdatePayload } from '../types/ipc';
 
 export type DataLoaderCache = Map<SlabIndex, SearchResultItem>;
-type IconOverrideValue = string | undefined;
+type CachedIcon = { icon: string; thumbnail: boolean; requestId: number };
+const ICON_CACHE_LIMIT = 512;
+const iconKey = (item: Pick<SearchResultItem, 'path' | 'metadata'>): string => {
+  const metadata = item.metadata;
+  return JSON.stringify([
+    item.path,
+    metadata?.type,
+    metadata?.size,
+    metadata?.mtime,
+    metadata?.ctime,
+  ]);
+};
 
 const fromNodeInfo = (node: NodeInfoResponse): SearchResultItem => ({
   path: node.path,
@@ -25,7 +36,8 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
   // late `get_nodes_info` responses from the previous result-set can be ignored safely.
   const versionRef = useRef(0);
   const cacheRef = useRef<DataLoaderCache>(new Map());
-  const iconOverridesRef = useRef<Map<SlabIndex, IconOverrideValue>>(new Map());
+  // File identity survives search refreshes; slab slots can be reused for other files.
+  const iconsRef = useRef(new Map<string, CachedIcon>());
   const [cache, setCache] = useState<DataLoaderCache>(() => {
     const initial = new Map<SlabIndex, SearchResultItem>();
     cacheRef.current = initial;
@@ -39,7 +51,6 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
   useLayoutEffect(() => {
     versionRef.current += 1;
     loadingRef.current.clear();
-    iconOverridesRef.current.clear();
     const nextCache = new Map<SlabIndex, SearchResultItem>();
     cacheRef.current = nextCache;
     setCache(nextCache);
@@ -56,11 +67,22 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
 
         updates.forEach((update) => {
           const slabIndex = update.slabIndex;
-          const nextIcon = update.icon;
-          iconOverridesRef.current.set(slabIndex, nextIcon);
+          const key = iconKey({ path: update.path, metadata: update.metadata ?? undefined });
+          const cached = iconsRef.current.get(key);
+          if (cached && update.requestId < cached.requestId) return;
+          // A refresh's ordinary icon must not replace an existing thumbnail.
+          const next =
+            cached?.thumbnail && !update.thumbnail
+              ? { ...cached, requestId: update.requestId }
+              : { icon: update.icon, thumbnail: update.thumbnail, requestId: update.requestId };
+          iconsRef.current.delete(key);
+          iconsRef.current.set(key, next);
+          if (iconsRef.current.size > ICON_CACHE_LIMIT) {
+            iconsRef.current.delete(iconsRef.current.keys().next().value!);
+          }
 
           const current = prev.get(slabIndex);
-          if (!current || current.icon === nextIcon) {
+          if (!current || iconKey(current) !== key || current.icon === next.icon) {
             return;
           }
 
@@ -68,7 +90,7 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
             nextCache = new Map(prev);
           }
 
-          nextCache.set(slabIndex, { ...current, icon: nextIcon });
+          nextCache.set(slabIndex, { ...current, icon: next.icon });
         });
 
         if (nextCache === null) {
@@ -102,7 +124,10 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
       }
       if (needLoading.length === 0) return;
       const versionAtRequest = versionRef.current;
-      const fetched = await invoke<NodeInfoResponse[]>('get_nodes_info', { results: needLoading });
+      const fetched = await invoke<NodeInfoResponse[]>('get_nodes_info', {
+        results: needLoading,
+        includeIcons: false,
+      });
       if (versionRef.current !== versionAtRequest) {
         // The result-set changed while this request was in flight. Drop the payload instead of
         // merging stale rows into the cache for the new query.
@@ -121,12 +146,10 @@ export function useDataLoader(results: SlabIndex[], dataResultsVersion: number) 
           }
 
           const normalizedItem = fromNodeInfo(fetchedItem);
-          const existing = prev.get(slabIndex);
-          const hasOverride = iconOverridesRef.current.has(slabIndex);
-          // Preserve newer icon updates that may have arrived after the node snapshot was read.
-          const preferredIcon = hasOverride
-            ? iconOverridesRef.current.get(slabIndex)
-            : (existing?.icon ?? normalizedItem.icon);
+          // Reattach before publishing fresh rows, so the frozen viewport transitions
+          // directly to rows with their existing icons rather than blank placeholders.
+          const preferredIcon =
+            iconsRef.current.get(iconKey(normalizedItem))?.icon ?? normalizedItem.icon;
 
           const mergedItem =
             preferredIcon === normalizedItem.icon

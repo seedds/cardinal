@@ -61,6 +61,20 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
   // ----- state -----
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const pointerYRef = useRef<number | null>(null);
+
+  const trackHover = (event: React.MouseEvent<HTMLDivElement>) => {
+    const y = event.clientY - event.currentTarget.getBoundingClientRect().top;
+    pointerYRef.current = y;
+    setHoveredRow(Math.floor((scrollTop + y) / rowHeight));
+  };
+
+  useLayoutEffect(() => {
+    if (pointerYRef.current !== null) {
+      setHoveredRow(Math.floor((scrollTop + pointerYRef.current) / rowHeight));
+    }
+  }, [scrollTop, rowHeight]);
 
   // ----- derived -----
   // Row count is inferred from the results array; explicit rowCount is no longer supported
@@ -258,14 +272,38 @@ export const VirtualList = forwardRef<VirtualListHandle, VirtualListProps>(funct
       role="list"
       aria-rowcount={rowCount}
     >
-      <div className="virtual-list-viewport" onScroll={handleHorizontalScroll}>
+      <div
+        className="virtual-list-viewport"
+        onScroll={handleHorizontalScroll}
+        onMouseEnter={trackHover}
+        onMouseMove={trackHover}
+        onMouseLeave={() => {
+          pointerYRef.current = null;
+          setHoveredRow(null);
+        }}
+      >
         <div className="virtual-list-items">{renderedItems}</div>
         {frozenViewport ? (
           // This sits above the live layer and visually "freezes" the previous viewport.
           // The live layer keeps loading underneath; once the new viewport is ready we remove
           // the overlay and the user sees the new rows without an empty-frame transition.
           <div className="virtual-list-overlay" aria-hidden="true">
-            {frozenViewport.items}
+            {frozenViewport.items.map((item, index) => {
+              const rowIndex =
+                Math.max(0, Math.floor(frozenViewport.scrollTop / rowHeight) - overscan) + index;
+              return (
+                <div
+                  key={index}
+                  className={
+                    rowIndex === hoveredRow
+                      ? 'virtual-list-frozen-row virtual-list-frozen-row--hovered'
+                      : 'virtual-list-frozen-row'
+                  }
+                >
+                  {item}
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>

@@ -17,7 +17,17 @@
 
 ### Download
 
-Use homebrew:
+Install this fork with Homebrew:
+
+```bash
+brew install --cask seedds/tap/cardinal
+```
+
+Fork builds are available from [seedds/cardinal Releases](https://github.com/seedds/cardinal/releases/).
+The current fork release is **0.1.26**. See the [changelog](CHANGELOG.md)
+for search responsiveness, Trash, selection, and icon stability fixes.
+
+For the upstream Cardinal distribution:
 
 ```bash
 brew install --cask cardinal-search
@@ -59,7 +69,11 @@ For the supported operator catalog—including boolean grouping, folder scoping,
 - `Cmd+C` – copy the selected files to the clipboard.
 - `Cmd+Shift+C` – copy the selected paths to the clipboard.
 - `Cmd+F` – jump focus back to the search bar.
+- `F2` – rename one selected file without overwriting an existing destination.
+- `F8` – move selected files to Trash.
 - `ArrowUp`/`ArrowDown` (in search bar) – cycle search history.
+
+The context menu also supports revealing the first selected file in Double Commander.
 
 Happy searching!
 
@@ -75,6 +89,27 @@ Happy searching!
 - Xcode command-line tools & Tauri prerequisites (<https://tauri.app/start/prerequisites/>)
 
 ### Development mode
+
+From the repository root, run the optimized local app:
+
+```bash
+./run-cardinal-release.sh
+```
+
+The script installs frontend dependencies if needed and starts Tauri with Rust release
+optimizations. It launches without a confirmation prompt. Quit an existing Cardinal
+instance first; press `Ctrl+C` in the terminal to stop the development run.
+
+For a debug run preceded by search and selection regression tests:
+
+```bash
+./test-cardinal.sh
+```
+
+See [TESTING.md](TESTING.md) for checks and desktop scenarios, and
+[CONTEXT.md](CONTEXT.md) for the current implementation and release status.
+
+The equivalent direct development command, with optional developer features, is:
 
 ```bash
 cd cardinal

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.26 — 2026-09-27
+
+- Preserve pending search input and visible results during background refreshes.
+- Coalesce background refresh requests and leave a one-second pause after a background search completes.
+- Reuse identical in-flight searches when Enter is pressed again; submit pending typing immediately.
+- Refresh after indexed data changes rather than status-counter updates alone.
+- Preserve selection and keyboard-navigation state across background result reordering when slab identities remain present.
+- Load row text independently of icons and thumbnails.
+- Retain icons for unchanged paths and metadata across refreshes, prevent thumbnail downgrades, and reject older icon responses for cached identities.
+- Preserve row hover highlighting on the frozen viewport during background refreshes.
+- Replace Finder AppleScript Trash operations with the native macOS Trash API.
+- Add local debug/test and optimized launch scripts; the optimized launcher starts without confirmation.
+
+## 0.1.25 — Fork release
+
+- Add F8 Move to Trash and F2 rename, including context-menu actions.
+- Refuse rename operations that would overwrite another file.
+- Add reveal in Double Commander.
+- Publish an Apple Silicon DMG and update the `seedds/tap/cardinal` Homebrew cask.
+
+## 0.1.24 — Fork release
+
+- Apply cheaper search filters before reading file contents.
+- Skip cloud placeholders during content searches and report skipped files.
+- Recover the index when filesystem events indicate a rescan is needed.
+- Introduce the fork's Homebrew tap distribution.
+
 ## 0.1.23 — 2026-03-25
 - Reduce power consumption by expanding the default ignored paths to cover more macOS cache, log, metadata, and runtime directories.
 - Further reduce background work by making the filesystem event watcher honor ignored paths.

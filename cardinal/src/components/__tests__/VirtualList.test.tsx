@@ -190,4 +190,51 @@ describe('VirtualList frozen viewport', () => {
       expect(container.querySelector('.virtual-list-overlay')).toBeNull();
     });
   });
+
+  it('keeps frozen-row hover aligned with a stationary or moving pointer during refresh', async () => {
+    let cache = new Map<SlabIndex, SearchResultItem>([
+      [1 as SlabIndex, buildItem('/first')],
+      [2 as SlabIndex, buildItem('/second')],
+    ]);
+    mockUseDataLoader.mockImplementation(() => ({
+      cache,
+      ensureRangeLoaded: mockEnsureRangeLoaded,
+    }));
+    const row = (index: number, item: SearchResultItem | undefined, style: React.CSSProperties) => (
+      <div key={index} className={index === 1 ? 'row row-selected' : 'row'} style={style}>
+        {item?.path ?? 'loading'}
+      </div>
+    );
+    const list = (version: number) => (
+      <VirtualList
+        results={[1 as SlabIndex, 2 as SlabIndex]}
+        dataResultsVersion={version}
+        displayedResultsVersion={version}
+        rowHeight={20}
+        overscan={0}
+        renderRow={row}
+        onScrollSync={() => {}}
+      />
+    );
+    const { container, rerender } = render(list(1));
+    const viewport = container.querySelector('.virtual-list-viewport')!;
+    fireEvent.mouseMove(viewport, { clientY: 10 });
+    cache = new Map();
+    rerender(list(2));
+    const hovered = () => container.querySelector('.virtual-list-frozen-row--hovered');
+    expect(hovered()).toHaveTextContent('/first');
+    fireEvent.mouseMove(viewport, { clientY: 30 });
+    expect(hovered()).toHaveTextContent('/second');
+    expect(hovered()?.querySelector('.row-selected')).not.toBeNull();
+    fireEvent.mouseLeave(viewport);
+    expect(hovered()).toBeNull();
+    fireEvent.mouseEnter(viewport, { clientY: 10 });
+    expect(hovered()).toHaveTextContent('/first');
+    cache = new Map([
+      [1 as SlabIndex, buildItem('/first')],
+      [2 as SlabIndex, buildItem('/second')],
+    ]);
+    rerender(list(2));
+    await waitFor(() => expect(container.querySelector('.virtual-list-overlay')).toBeNull());
+  });
 });

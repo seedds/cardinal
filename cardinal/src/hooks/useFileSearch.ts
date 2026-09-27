@@ -8,12 +8,14 @@ import {
   type SearchResponsePayload,
 } from '../types/ipc';
 import type { SlabIndex } from '../types/slab';
+import { subscribeIndexChanged } from '../runtime/tauriEventRuntime';
 
 type SearchError = string | Error | null;
 
 type SearchState = {
   results: SlabIndex[];
   resultsVersion: number;
+  selectionVersion: number;
   scannedFiles: number;
   processedEvents: number;
   rescanErrors: number;
@@ -60,6 +62,7 @@ type SearchAction =
         count: number;
         skippedCloudFiles: number;
         highlightTerms: string[];
+        background: boolean;
       };
     }
   | {
@@ -75,6 +78,7 @@ type SearchAction =
 const initialSearchState: SearchState = {
   results: [],
   resultsVersion: 0,
+  selectionVersion: 0,
   scannedFiles: 0,
   processedEvents: 0,
   rescanErrors: 0,
@@ -152,6 +156,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         ...state,
         results: action.payload.results,
         resultsVersion: state.resultsVersion + 1,
+        selectionVersion: state.selectionVersion + (action.payload.background ? 0 : 1),
         currentQuery: action.payload.query,
         currentDirectoryQuery: action.payload.directoryQuery,
         highlightTerms: action.payload.highlightTerms,
@@ -222,6 +227,11 @@ export function useFileSearch(): UseFileSearchResult {
   // so this only serves as a defence-in-depth
   const searchVersionRef = useRef(0);
   const hasInitialSearchRunRef = useRef(false);
+  const searchInFlightRef = useRef(false);
+  const inFlightParamsRef = useRef<SearchParams | null>(null);
+  const refreshPendingRef = useRef(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nextRefreshAtRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadingDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -274,102 +284,145 @@ export function useFileSearch(): UseFileSearchResult {
     cancelTimer(loadingDelayTimerRef);
   }, []);
 
-  const handleSearch = useCallback(async (overrides: Partial<SearchParams> = {}) => {
-    const nextSearch = { ...latestSearchRef.current, ...overrides };
-    latestSearchRef.current = nextSearch;
-    // the backend already has search version cancellation
-    // but we keep the check at frontend to make sure that
-    // the UI always reflects the latest request
-    const requestVersion = searchVersionRef.current + 1;
-    searchVersionRef.current = requestVersion;
-
-    const { query, caseSensitive } = nextSearch;
-    const directoryQuery = activeDirectoryQuery(nextSearch);
-    const startTs = performance.now();
-    const isInitial = !hasInitialSearchRunRef.current;
-
-    dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
-
-    if (!isInitial) {
-      cancelTimer(loadingDelayTimerRef);
-      loadingDelayTimerRef.current = setTimeout(() => {
-        dispatch({ type: 'SEARCH_LOADING_DELAY' });
-        loadingDelayTimerRef.current = null;
-      }, 150);
-    }
-
-    try {
-      const rawResults = await invoke<SearchResponsePayload>('search', {
-        query: searchParamOrNull(query),
-        directoryQuery: searchParamOrNull(directoryQuery),
-        options: {
-          caseInsensitive: !caseSensitive,
-        },
-      });
-
-      if (searchVersionRef.current !== requestVersion) {
+  const handleSearch = useCallback(
+    async (overrides: Partial<SearchParams> = {}, background = false): Promise<void> => {
+      const nextSearch = { ...latestSearchRef.current, ...overrides };
+      const inFlight = inFlightParamsRef.current;
+      if (
+        !background &&
+        inFlight &&
+        inFlight.query === nextSearch.query &&
+        inFlight.caseSensitive === nextSearch.caseSensitive &&
+        activeDirectoryQuery(inFlight) === activeDirectoryQuery(nextSearch)
+      ) {
         return;
       }
+      if (background && (searchInFlightRef.current || debounceTimerRef.current !== null)) {
+        refreshPendingRef.current = true;
+        return;
+      }
+      if (background) {
+        const delay = nextRefreshAtRef.current - performance.now();
+        if (delay > 0) {
+          if (refreshTimerRef.current === null) {
+            refreshTimerRef.current = setTimeout(() => {
+              refreshTimerRef.current = null;
+              void handleSearch({}, true);
+            }, delay);
+          }
+          return;
+        }
+      }
+      cancelTimer(refreshTimerRef);
+      searchInFlightRef.current = true;
+      inFlightParamsRef.current = nextSearch;
+      refreshPendingRef.current = false;
+      latestSearchRef.current = nextSearch;
+      // the backend already has search version cancellation
+      // but we keep the check at frontend to make sure that
+      // the UI always reflects the latest request
+      const requestVersion = searchVersionRef.current + 1;
+      searchVersionRef.current = requestVersion;
 
-      if (rawResults.statusCode === SearchStatusCode.CANCELLED) {
+      const { query, caseSensitive } = nextSearch;
+      const directoryQuery = activeDirectoryQuery(nextSearch);
+      const startTs = performance.now();
+      const isInitial = !hasInitialSearchRunRef.current;
+
+      cancelTimer(loadingDelayTimerRef);
+      dispatch({ type: 'SEARCH_REQUEST', payload: { immediate: isInitial } });
+
+      if (!isInitial && !background) {
+        loadingDelayTimerRef.current = setTimeout(() => {
+          dispatch({ type: 'SEARCH_LOADING_DELAY' });
+          loadingDelayTimerRef.current = null;
+        }, 150);
+      }
+
+      try {
+        const rawResults = await invoke<SearchResponsePayload>('search', {
+          query: searchParamOrNull(query),
+          directoryQuery: searchParamOrNull(directoryQuery),
+          options: {
+            caseInsensitive: !caseSensitive,
+          },
+        });
+
+        if (searchVersionRef.current !== requestVersion) {
+          return;
+        }
+
+        if (rawResults.statusCode === SearchStatusCode.CANCELLED) {
+          cancelTimer(loadingDelayTimerRef);
+          dispatch({ type: 'SEARCH_CANCELLED' });
+          return;
+        }
+
+        const searchResults = rawResults.results as SlabIndex[];
+        const highlightTerms = Array.isArray(rawResults.highlights)
+          ? rawResults.highlights.filter((term): term is string => typeof term === 'string')
+          : [];
+
         cancelTimer(loadingDelayTimerRef);
-        dispatch({ type: 'SEARCH_CANCELLED' });
-        return;
+
+        const endTs = performance.now();
+        const duration = endTs - startTs;
+
+        dispatch({
+          type: 'SEARCH_SUCCESS',
+          payload: {
+            results: searchResults,
+            query,
+            directoryQuery,
+            duration,
+            count: searchResults.length,
+            skippedCloudFiles: rawResults.skippedCloudFiles ?? 0,
+            highlightTerms,
+            background,
+          },
+        });
+      } catch (error) {
+        console.error('Search failed:', error);
+
+        if (searchVersionRef.current !== requestVersion) {
+          return;
+        }
+
+        cancelTimer(loadingDelayTimerRef);
+
+        const endTs = performance.now();
+        const duration = endTs - startTs;
+
+        const normalisedError =
+          error instanceof Error ? error : error ? String(error) : 'An unknown error occurred.';
+
+        dispatch({
+          type: 'SEARCH_FAILURE',
+          payload: {
+            error: normalisedError,
+            duration,
+          },
+        });
+      } finally {
+        hasInitialSearchRunRef.current = true;
+        if (searchVersionRef.current === requestVersion) {
+          searchInFlightRef.current = false;
+          inFlightParamsRef.current = null;
+          // Leave the shared backend loop time to process events and load row metadata.
+          if (background) nextRefreshAtRef.current = performance.now() + 1000;
+          if (refreshPendingRef.current && debounceTimerRef.current === null) {
+            void handleSearch({}, true);
+          }
+        }
       }
-
-      const searchResults = rawResults.results as SlabIndex[];
-      const highlightTerms = Array.isArray(rawResults.highlights)
-        ? rawResults.highlights.filter((term): term is string => typeof term === 'string')
-        : [];
-
-      cancelTimer(loadingDelayTimerRef);
-
-      const endTs = performance.now();
-      const duration = endTs - startTs;
-
-      dispatch({
-        type: 'SEARCH_SUCCESS',
-        payload: {
-          results: searchResults,
-          query,
-          directoryQuery,
-          duration,
-          count: searchResults.length,
-          skippedCloudFiles: rawResults.skippedCloudFiles ?? 0,
-          highlightTerms,
-        },
-      });
-    } catch (error) {
-      console.error('Search failed:', error);
-
-      if (searchVersionRef.current !== requestVersion) {
-        return;
-      }
-
-      cancelTimer(loadingDelayTimerRef);
-
-      const endTs = performance.now();
-      const duration = endTs - startTs;
-
-      const normalisedError =
-        error instanceof Error ? error : error ? String(error) : 'An unknown error occurred.';
-
-      dispatch({
-        type: 'SEARCH_FAILURE',
-        payload: {
-          error: normalisedError,
-          duration,
-        },
-      });
-    } finally {
-      hasInitialSearchRunRef.current = true;
-    }
-  }, []);
+    },
+    [],
+  );
 
   const queueSearchParams = useCallback(
     (patch: Partial<SearchParams>, options?: QueueSearchOptions) => {
       updateSearchParams(patch);
-      cancelPendingSearches();
+      cancelTimer(debounceTimerRef);
       if (options?.immediate) {
         options.onSearchCommitted?.();
         void handleSearch(patch);
@@ -377,11 +430,12 @@ export function useFileSearch(): UseFileSearchResult {
       }
 
       debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
         options?.onSearchCommitted?.();
         handleSearch(patch);
       }, SEARCH_DEBOUNCE_MS);
     },
-    [cancelPendingSearches, handleSearch, updateSearchParams],
+    [handleSearch, updateSearchParams],
   );
 
   const queueSearch = useCallback(
@@ -405,7 +459,25 @@ export function useFileSearch(): UseFileSearchResult {
     [queueSearchParams],
   );
 
-  useEffect(() => cancelPendingSearches, [cancelPendingSearches]);
+  useEffect(
+    () => () => {
+      refreshPendingRef.current = false;
+      searchVersionRef.current += 1;
+      searchInFlightRef.current = false;
+      inFlightParamsRef.current = null;
+      cancelTimer(refreshTimerRef);
+      cancelPendingSearches();
+    },
+    [cancelPendingSearches],
+  );
+
+  useEffect(
+    () =>
+      subscribeIndexChanged(() => {
+        void handleSearch({}, true);
+      }),
+    [handleSearch],
+  );
 
   useEffect(() => {
     if (!hasInitialSearchRunRef.current) {

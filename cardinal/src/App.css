@@ -902,11 +902,13 @@ button:active:not(:disabled) {
   background-color: var(--row-even);
 }
 
-.row:hover {
+.row:hover,
+.virtual-list-frozen-row--hovered .row {
   background-color: var(--row-hover);
 }
 
-.row-loading:hover {
+.row-loading:hover,
+.virtual-list-frozen-row--hovered .row-loading {
   background-color: var(--row-even);
 }
 
@@ -915,7 +917,8 @@ button:active:not(:disabled) {
   color: var(--row-selected-text);
 }
 
-.row-selected:hover {
+.row-selected:hover,
+.virtual-list-frozen-row--hovered .row-selected {
   background-color: var(--row-selected-hover-bg);
 }
 
@@ -1980,6 +1983,10 @@ button:active:not(:disabled) {
      batch loads underneath it. */
   pointer-events: none;
   z-index: 1;
+}
+
+.virtual-list-frozen-row {
+  display: contents;
 }
 
 /* === Virtual List Styles === */

@@ -7,7 +7,7 @@ This chapter maps the React-side state graph to the Tauri command/event layer.
 SearchBar / keyboard submit
   -> useFilesTabState.queueSearch(...)
   -> useFileSearch.handleSearch(...)
-  -> invoke('search', { query, options })
+  -> invoke('search', { query, directoryQuery, options })
   -> SearchResponse { results, highlights, statusCode }
   -> useRemoteSort(...)
   -> <VirtualList results={displayedResults} ... />
@@ -16,7 +16,8 @@ SearchBar / keyboard submit
 - `useFileSearch` owns the authoritative search state: raw `results`, highlight terms, status counters, lifecycle state, loading UI, timing, and error state.
 - The backend owns the search version: each `invoke('search', ...)` call increments `ACTIVE_SEARCH_VERSION` via `CancellationToken::new_search()`, automatically cancelling any in-flight search. Cancelled searches return `statusCode: CANCELLED`; transport/processing failures return as `Err` (caught by the frontend `catch` path).
 - The frontend also tracks a local `searchVersionRef` as defence-in-depth: if a response arrives after a newer request was already fired, it is discarded regardless of `statusCode`.
-- Loading UI is immediate for the first search and delayed by 150 ms for later searches.
+- Loading UI is immediate for the first search and delayed by 150 ms for later foreground searches. Background refreshes preserve the visible list.
+- Identical in-flight foreground requests are reused. Index changes trigger coalesced background refreshes using the latest input; status-counter updates alone do not.
 
 ## Result projection and sorting
 - `useRemoteSort` decides whether sorting stays enabled based on `sortThreshold` (default `20000`).
@@ -27,12 +28,13 @@ SearchBar / keyboard submit
 - `VirtualList` uses both:
   - `dataResultsVersion` resets hydrated row data
   - `displayedResultsVersion` resets viewport/icon tracking
+- `selectionVersion` tracks foreground search completions separately. Background refreshes remap selection by surviving slab indices rather than clearing selection and scrolling to the top.
 
 ## Row hydration
 ```text
 VirtualList visible window [start, end]
   -> useDataLoader.ensureRangeLoaded(start, end)
-  -> invoke('get_nodes_info', { results: slabIndices })
+  -> invoke('get_nodes_info', { results: slabIndices, includeIcons: false })
   -> cache rows by SlabIndex
 ```
 
@@ -52,11 +54,14 @@ VirtualList
 
 - `useIconViewport` batches updates with `requestAnimationFrame`.
 - It deduplicates unchanged ranges and sends an empty viewport once when the list becomes empty or unmounts.
-- `iconOverridesRef` ensures pushed Quick Look thumbnails win over older `get_nodes_info` responses.
+- A bounded, 512-entry icon cache uses path and metadata identity independently of slab slots. It survives row-cache resets and reattaches icons before hydrated rows are published.
+- Each icon event carries `slabIndex`, `path`, `metadata`, `requestId`, `thumbnail`, and `icon`. Older responses for cached identities are rejected, and ordinary icons cannot replace cached thumbnails.
+- Request IDs increase across list remounts within the frontend runtime. Row identity checks prevent an old response from attaching to a different file that reused a slab slot.
 
 ## Window-level event runtime
 `cardinal/src/runtime/tauriEventRuntime.ts` registers shared listeners for:
 - `status_bar_update`
+- `index_changed`
 - `app_lifecycle_state`
 - `quick_launch`
 - `fs_events_batch`
@@ -69,6 +74,8 @@ VirtualList
 - lifecycle -> `useFileSearch`
 - quick launch -> focus/select the search input
 - drag-drop -> quote the dropped path and route it to either file search or event filtering
+
+`useFileSearch` subscribes directly to `index_changed` for background refreshes.
 
 ## Recent FSEvents tab
 - `useRecentFSEvents` keeps an in-memory buffer of up to `10000` recent events.

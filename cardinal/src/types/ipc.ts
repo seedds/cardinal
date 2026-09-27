@@ -1,4 +1,5 @@
 import type { SlabIndex } from './slab';
+import type { SearchResultMetadata } from './search';
 
 export type StatusBarUpdatePayload = {
   scannedFiles: number;
@@ -8,12 +9,15 @@ export type StatusBarUpdatePayload = {
 
 export type IconUpdateWirePayload = {
   slabIndex: number;
-  icon?: string;
+  path: string;
+  metadata: SearchResultMetadata | null;
+  requestId: number;
+  thumbnail: boolean;
+  icon: string;
 };
 
-export type IconUpdatePayload = {
+export type IconUpdatePayload = Omit<IconUpdateWirePayload, 'slabIndex'> & {
   slabIndex: SlabIndex;
-  icon?: string;
 };
 
 export type RecentEventPayload = {

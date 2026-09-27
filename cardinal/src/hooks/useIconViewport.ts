@@ -9,9 +9,11 @@ type UseIconViewportProps = {
   end: number;
 };
 
+// Keep request ordering across list unmounts while old native jobs finish.
+let nextRequestId = 0;
+
 // Deduplicates and throttles icon viewport updates to the backend.
 export function useIconViewport({ results, resultsVersion, start, end }: UseIconViewportProps) {
-  const requestIdRef = useRef(0);
   const lastRangeRef = useRef<{ start: number; end: number } | null>(null);
   const pendingRef = useRef<SlabIndex[] | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -21,8 +23,7 @@ export function useIconViewport({ results, resultsVersion, start, end }: UseIcon
     const viewport = pendingRef.current;
     if (!viewport) return;
     pendingRef.current = null;
-    requestIdRef.current += 1;
-    void invoke('update_icon_viewport', { id: requestIdRef.current, viewport });
+    void invoke('update_icon_viewport', { id: ++nextRequestId, viewport });
   }, []);
 
   const scheduleIconViewport = useCallback(
@@ -61,7 +62,7 @@ export function useIconViewport({ results, resultsVersion, start, end }: UseIcon
 
     lastRangeRef.current = { start: clampedStart, end: clampedEnd };
     scheduleIconViewport(results.slice(clampedStart, clampedEnd + 1));
-  }, [results, start, end, scheduleIconViewport]);
+  }, [results, resultsVersion, start, end, scheduleIconViewport]);
 
   useEffect(
     () => () => {

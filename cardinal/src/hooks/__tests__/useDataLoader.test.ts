@@ -41,6 +41,68 @@ const createDeferred = <T>() => {
 };
 
 describe('useDataLoader', () => {
+  it('retains a thumbnail across refreshes and does not downgrade it to an ordinary icon', async () => {
+    const row = 11 as SlabIndex;
+    const { result, rerender } = renderDataLoader({ results: [row], version: 1 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    const calls = mockedSubscribeIconUpdate.mock.calls;
+    const emitIcons = calls[calls.length - 1][0];
+    const update = {
+      slabIndex: row,
+      path: '/tmp/file-11',
+      metadata: null,
+      requestId: 1,
+      thumbnail: true,
+      icon: 'thumbnail',
+    };
+    act(() => emitIcons([update]));
+    rerender({ results: [row], version: 2 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    expect(result.current.cache.get(row)?.icon).toBe('thumbnail');
+    act(() => emitIcons([{ ...update, requestId: 2, thumbnail: false, icon: 'ordinary' }]));
+    expect(result.current.cache.get(row)?.icon).toBe('thumbnail');
+    act(() => emitIcons([{ ...update, requestId: 3, icon: 'new-thumbnail' }]));
+    act(() => emitIcons([{ ...update, requestId: 1, icon: 'late-thumbnail' }]));
+    expect(result.current.cache.get(row)?.icon).toBe('new-thumbnail');
+  });
+
+  it('rejects icons for a reused slab slot or changed file metadata', async () => {
+    const row = 11 as SlabIndex;
+    const { result, rerender } = renderDataLoader({ results: [row], version: 1 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    const calls = mockedSubscribeIconUpdate.mock.calls;
+    const emitIcons = calls[calls.length - 1][0];
+    const update = {
+      slabIndex: row,
+      path: '/tmp/file-11',
+      metadata: null,
+      requestId: 1,
+      thumbnail: true,
+      icon: 'old-thumbnail',
+    };
+    act(() => emitIcons([update]));
+    mockedInvoke.mockResolvedValue([{ ...buildNodeInfo(row), path: '/tmp/replacement' }]);
+    rerender({ results: [row], version: 2 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    act(() => emitIcons([update]));
+    expect(result.current.cache.get(row)?.icon).toBeUndefined();
+    mockedInvoke.mockResolvedValue([
+      { ...buildNodeInfo(row), metadata: { type: 1, size: 10, mtime: 20, ctime: 30 } },
+    ]);
+    rerender({ results: [row], version: 3 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    act(() => emitIcons([update]));
+    expect(result.current.cache.get(row)?.icon).toBeUndefined();
+  });
+  it('requests row text without waiting for icon extraction', async () => {
+    const { result } = renderDataLoader({ results: [1] as SlabIndex[], version: 1 });
+    await act(async () => result.current.ensureRangeLoaded(0, 0));
+    expect(mockedInvoke).toHaveBeenCalledWith('get_nodes_info', {
+      results: [1],
+      includeIcons: false,
+    });
+    expect(result.current.cache.get(1 as SlabIndex)?.path).toBe('/tmp/file-1');
+  });
   const iconUpdateUnlisten = vi.fn();
 
   beforeEach(() => {
@@ -159,4 +221,35 @@ describe('useDataLoader', () => {
 
     expect(iconUpdateUnlisten).toHaveBeenCalled();
   });
+
+  it.each([true, false])(
+    'merges deferred icons when they arrive before row text: %s',
+    async (iconFirst) => {
+      const row = 11 as SlabIndex;
+      const deferred = createDeferred<BuiltNodeInfo[]>();
+      mockedInvoke.mockReturnValue(deferred.promise);
+      const { result } = renderDataLoader({ results: [row], version: 1 });
+      const calls = mockedSubscribeIconUpdate.mock.calls;
+      const emitIcons = calls[calls.length - 1][0];
+      act(() => {
+        void result.current.ensureRangeLoaded(0, 0);
+      });
+      const icon = {
+        slabIndex: row,
+        path: '/tmp/file-11',
+        metadata: null,
+        requestId: 1,
+        thumbnail: false,
+        icon: 'icon-data',
+      };
+      if (iconFirst) act(() => emitIcons([icon]));
+      await act(async () => deferred.resolve([buildNodeInfo(row)]));
+      expect(result.current.cache.get(row)?.path).toBe('/tmp/file-11');
+      if (!iconFirst) {
+        expect(result.current.cache.get(row)?.icon).toBeUndefined();
+        act(() => emitIcons([icon]));
+      }
+      expect(result.current.cache.get(row)?.icon).toBe('icon-data');
+    },
+  );
 });

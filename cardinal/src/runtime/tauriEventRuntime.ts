@@ -26,6 +26,7 @@ type Listener<T> = (payload: T) => void;
 export type WindowDragDropEvent = TauriEvent<DragDropEvent>;
 
 const statusBarUpdateListeners = new Set<Listener<StatusBarUpdatePayload>>();
+const indexChangedListeners = new Set<Listener<void>>();
 const lifecycleStateListeners = new Set<Listener<AppLifecycleStatus>>();
 const quickLaunchListeners = new Set<Listener<void>>();
 const fsEventsBatchListeners = new Set<Listener<RecentEventPayload[]>>();
@@ -77,7 +78,16 @@ const isIconUpdateWirePayload = (value: unknown): value is IconUpdateWirePayload
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.slabIndex === 'number' &&
-    (typeof candidate.icon === 'string' || typeof candidate.icon === 'undefined')
+    typeof candidate.path === 'string' &&
+    typeof candidate.requestId === 'number' &&
+    typeof candidate.thumbnail === 'boolean' &&
+    typeof candidate.icon === 'string' &&
+    (candidate.metadata === null ||
+      (typeof candidate.metadata === 'object' &&
+        candidate.metadata !== null &&
+        ['type', 'size', 'mtime', 'ctime'].every(
+          (key) => typeof (candidate.metadata as Record<string, unknown>)[key] === 'number',
+        )))
   );
 };
 
@@ -87,7 +97,7 @@ const normalizeIconUpdates = (payload: unknown): IconUpdatePayload[] => {
   }
   return payload
     .filter(isIconUpdateWirePayload)
-    .map((item) => ({ slabIndex: item.slabIndex as SlabIndex, icon: item.icon }));
+    .map((item) => ({ ...item, slabIndex: item.slabIndex as SlabIndex }));
 };
 
 export const initializeTauriEventRuntime = (): Promise<void> => {
@@ -97,6 +107,11 @@ export const initializeTauriEventRuntime = (): Promise<void> => {
 
   initPromise = (async () => {
     const setupTasks: Promise<unknown>[] = [
+      listen('index_changed', () => {
+        emit(indexChangedListeners, undefined);
+      }).catch((error) => {
+        console.error('Failed to register index_changed listener', error);
+      }),
       listen<StatusBarUpdatePayload>('status_bar_update', (event) => {
         const payload = event.payload;
         if (!payload) return;
@@ -162,6 +177,11 @@ export const subscribeStatusBarUpdate = (
 export const subscribeLifecycleState = (listener: Listener<AppLifecycleStatus>): UnlistenFn => {
   void initializeTauriEventRuntime();
   return subscribe(lifecycleStateListeners, listener);
+};
+
+export const subscribeIndexChanged = (listener: () => void): UnlistenFn => {
+  void initializeTauriEventRuntime();
+  return subscribe(indexChangedListeners, listener);
 };
 
 export const subscribeQuickLaunch = (listener: () => void): UnlistenFn => {

@@ -1,10 +1,11 @@
 import { renderHook, act } from '@testing-library/react';
 import type { MutableRefObject } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { VirtualListHandle } from '../../components/VirtualList';
 import type { SearchResultItem } from '../../types/search';
 import type { SlabIndex } from '../../types/slab';
 import { useSelection } from '../useSelection';
+import { useFilesTabEffects } from '../useFilesTabEffects';
 
 const toSlabIndex = (value: number): SlabIndex => value as SlabIndex;
 
@@ -75,6 +76,57 @@ const renderSelection = (initial: number[], initialVersion = 0) => {
 };
 
 describe('useSelection', () => {
+  it('retains selection and keyboard navigation through tab effects and row-cache reloads', () => {
+    const scrollToTop = vi.fn();
+    const list = createVirtualListRef({ scrollToTop });
+    const closeQuickLook = vi.fn();
+    const updateQuickLook = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ rows, version }) => {
+        const selection = useSelection(rows, version, list);
+        useFilesTabEffects({
+          activeTab: 'files',
+          ...selection,
+          closeQuickLook,
+          updateQuickLook,
+          resultsVersion: version,
+          virtualListRef: list,
+          eventsPanelRef: { current: null },
+        });
+        return selection;
+      },
+      { initialProps: { rows: [10, 20, 30].map(toSlabIndex), version: 1 } },
+    );
+    act(() => result.current.selectSingleRow(1));
+    expect(result.current.selectedPaths).toEqual(['item-1']);
+    list.current!.getItem = () => undefined;
+    rerender({ rows: [30, 10, 20].map(toSlabIndex), version: 1 });
+    expect(result.current.activeRowIndex).toBe(2);
+    expect(result.current.selectedPaths).toEqual(['item-1']);
+    expect(scrollToTop).toHaveBeenCalledTimes(1);
+    list.current!.getItem = (index) => ({ path: `reloaded-${index}` });
+    act(() => result.current.moveSelection(-1));
+    expect(result.current.activeRowIndex).toBe(1);
+    rerender({ rows: [30, 10, 20].map(toSlabIndex), version: 2 });
+    expect(result.current.selectedIndices).toEqual([]);
+    expect(scrollToTop).toHaveBeenCalledTimes(2);
+  });
+  it('preserves selected identities, active row, and anchor during a background reorder', () => {
+    const { result, selectRow, rerenderResults } = renderSelection([10, 20, 30, 40]);
+    selectRow(1);
+    metaClick(selectRow, 3);
+    rerenderResults([40, 30, 10, 20], { bumpVersion: false });
+    expect(result.current.selectedIndices).toEqual([3, 0]);
+    expect(result.current.activeRowIndex).toBe(0);
+    expect(result.current.shiftAnchorIndex).toBe(0);
+    expect(result.current.selectedIndicesRef.current).toEqual([3, 0]);
+    rerenderResults([30, 10, 20], { bumpVersion: false });
+    expect(result.current.selectedIndices).toEqual([2]);
+    expect(result.current.activeRowIndex).toBe(2);
+    rerenderResults([30, 10], { bumpVersion: false });
+    expect(result.current.selectedIndices).toEqual([]);
+    expect(result.current.activeRowIndex).toBeNull();
+  });
   it('keeps the original anchor when extending the selection with shift-click', () => {
     const { result, selectRow } = renderSelection([0, 1, 2, 3, 4, 5]);
 

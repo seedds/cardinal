@@ -233,7 +233,7 @@ impl SearchResponse {
     pub const CANCELLED: u8 = 1;
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct NodeInfoMetadata {
     pub r#type: u8,
     pub size: i64,
@@ -451,20 +451,74 @@ pub async fn open_in_finder(path: String) {
     }
 }
 
-#[tauri::command]
-pub async fn trash_files(paths: Vec<String>) -> Result<(), String> {
+#[tauri::command(async)]
+pub fn trash_files(paths: Vec<String>) -> Result<(), String> {
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
+
+    let manager = NSFileManager::defaultManager();
     for path in paths {
-        let output = Command::new("osascript")
-            .args(["-e", "on run argv\n tell application \"Finder\" to delete (POSIX file (item 1 of argv))\nend run", "--", &path])
-            .output().map_err(|e| e.to_string())?;
-        if !output.status.success() {
-            return Err(format!(
-                "Could not trash {path}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
-        }
+        let url = NSURL::fileURLWithPath(&NSString::from_str(&path));
+        manager
+            .trashItemAtURL_resultingItemURL_error(&url, None)
+            .map_err(|error| format!("Could not trash {path}: {}", error.localizedDescription()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod trash_tests {
+    use super::trash_files;
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    // Moves only fixtures created by this test to the real macOS Trash.
+    #[test]
+    #[ignore = "exercises the real macOS Trash; run explicitly"]
+    fn native_trash_moves_files_and_folders_and_reports_missing_paths() {
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("cardinal-trash-test-{id}"));
+        fs::create_dir(&root).unwrap();
+        let names = [
+            format!("cardinal-{id}-EE.en.json"),
+            format!("cardinal-{id}-space ' quote 日本語.txt"),
+            format!("cardinal-{id}-folder"),
+        ];
+        fs::write(root.join(&names[0]), b"fixture one").unwrap();
+        fs::write(root.join(&names[1]), b"fixture two").unwrap();
+        fs::create_dir(root.join(&names[2])).unwrap();
+        fs::write(root.join(&names[2]).join("child.txt"), b"nested fixture").unwrap();
+        trash_files(
+            names
+                .iter()
+                .map(|name| root.join(name).to_str().unwrap().to_owned())
+                .collect(),
+        )
+        .unwrap();
+        let trash = PathBuf::from(std::env::var_os("HOME").unwrap()).join(".Trash");
+        for name in &names {
+            assert!(!root.join(name).exists());
+        }
+        assert_eq!(fs::read(trash.join(&names[0])).unwrap(), b"fixture one");
+        assert_eq!(fs::read(trash.join(&names[1])).unwrap(), b"fixture two");
+        assert_eq!(
+            fs::read(trash.join(&names[2]).join("child.txt")).unwrap(),
+            b"nested fixture"
+        );
+        let missing = root.join("missing.json").to_str().unwrap().to_owned();
+        let error = trash_files(vec![missing.clone()]).unwrap_err();
+        assert!(error.contains(&missing));
+        // Remove only the uniquely named fixtures created above.
+        fs::remove_file(trash.join(&names[0])).unwrap();
+        fs::remove_file(trash.join(&names[1])).unwrap();
+        fs::remove_dir_all(trash.join(&names[2])).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
 }
 
 #[tauri::command]

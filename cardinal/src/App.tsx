@@ -47,6 +47,7 @@ function App() {
   const {
     results,
     resultsVersion,
+    selectionVersion,
     scannedFiles,
     processedEvents,
     rescanErrors,
@@ -96,7 +97,7 @@ function App() {
     selectSingleRow,
     clearSelection,
     moveSelection,
-  } = useSelection(displayedResults, displayedResultsVersion, virtualListRef);
+  } = useSelection(displayedResults, selectionVersion, virtualListRef);
 
   const navigateFromSearchToResults = useCallback(() => {
     if (displayedResults.length === 0) {
@@ -183,12 +184,8 @@ function App() {
   }, [focusAndSelectSearchInput]);
 
   const refreshSearchResults = useCallback(() => {
-    queueSearch(currentQuery, { immediate: true });
-  }, [currentQuery, queueSearch]);
-
-  useEffect(() => {
-    if (processedEvents > 0) refreshSearchResults();
-  }, [processedEvents, refreshSearchResults]);
+    queueSearch(searchParams.query, { immediate: true });
+  }, [searchParams.query, queueSearch]);
 
   const {
     isPreferencesOpen,
@@ -245,7 +242,7 @@ function App() {
     closeQuickLook,
     updateQuickLook,
     clearSelection,
-    resultsVersion,
+    resultsVersion: selectionVersion,
     virtualListRef,
     eventsPanelRef,
   });
