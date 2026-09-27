@@ -1207,13 +1207,15 @@ button:active:not(:disabled) {
 
 /* === Merged: StatusBar.css === */
 .status-bar {
-  height: 30px;
+  min-height: 30px;
   background: var(--color-elevated-bg);
   border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 3px 12px;
   font-size: 12px;
   color: var(--color-text);
   font-family: var(--font-sans);
@@ -1475,6 +1477,31 @@ button:active:not(:disabled) {
 
 [data-theme='dark'] .status-tab[data-tone='events'] {
   --status-tab-color: #ff9770;
+}
+
+.status-shortcuts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-muted);
+}
+
+.status-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.status-shortcut kbd {
+  padding: 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  line-height: 16px;
 }
 
 .status-right {

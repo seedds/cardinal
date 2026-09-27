@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} risultati",
     "duration": "{{value}} ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Risultati • Durata"
+    "resultsTitle": "Risultati • Durata",
+    "shortcuts": {
+      "rename": "Rinomina",
+      "trash": "Cestino",
+      "terminal": "Terminale"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "Salva",
     "reset": "Ripristina valori predefiniti",
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "terminalApp": {
+      "label": "Applicazione terminale",
+      "help": "Applicazione usata da F9, ad esempio /Applications/iTerm.app. Lascia vuoto per usare Terminale di macOS.",
+      "error": "Inserisci un percorso assoluto a un’applicazione .app oppure lascia vuoto per usare Terminale di macOS."
+    }
   },
   "language": {
     "label": "Lingua",

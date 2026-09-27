@@ -24,7 +24,7 @@ brew install --cask seedds/tap/cardinal
 ```
 
 Fork builds are available from [seedds/cardinal Releases](https://github.com/seedds/cardinal/releases/).
-The current fork release is **0.1.26**. See the [changelog](CHANGELOG.md)
+The current fork release is **0.1.27**. See the [changelog](CHANGELOG.md)
 for search responsiveness, Trash, selection, and icon stability fixes.
 
 For the upstream Cardinal distribution:
@@ -71,7 +71,10 @@ For the supported operator catalog—including boolean grouping, folder scoping,
 - `Cmd+F` – jump focus back to the search bar.
 - `F2` – rename one selected file without overwriting an existing destination.
 - `F8` – move selected files to Trash.
+- `F9` – open a terminal in the focused selected file’s directory, or inside the selected folder. With multiple selections, only the focused selected row is used.
 - `ArrowUp`/`ArrowDown` (in search bar) – cycle search history.
+
+Set **Preferences → Terminal application** to an absolute application path such as `/Applications/iTerm.app` to change the terminal used by F9. The default is macOS Terminal; clearing the field or resetting preferences restores it. Custom terminals must support opening directories through macOS. F9 applies while Cardinal is active and no dialog or text field is focused; window/tab placement follows the terminal’s preferences.
 
 The context menu also supports revealing the first selected file in Double Commander.
 

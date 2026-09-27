@@ -82,7 +82,12 @@
     "duration": "{{value}}ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
     "resultsTitle": "Results • Duration",
-    "skippedCloudFiles": "{{formatted}} cloud-only files skipped"
+    "skippedCloudFiles": "{{formatted}} cloud-only files skipped",
+    "shortcuts": {
+      "rename": "Rename",
+      "trash": "Trash",
+      "terminal": "Terminal"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -137,7 +142,12 @@
     },
     "save": "Save",
     "reset": "Restore defaults",
-    "close": "Close"
+    "close": "Close",
+    "terminalApp": {
+      "label": "Terminal application",
+      "help": "Application used by F9, e.g. /Applications/iTerm.app. Leave blank to use macOS Terminal.",
+      "error": "Enter an absolute .app path, or leave blank to use macOS Terminal."
+    }
   },
   "language": {
     "label": "Language",

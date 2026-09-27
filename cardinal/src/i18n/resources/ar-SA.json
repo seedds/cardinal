@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} نتائج",
     "duration": "{{value}} مللي ثانية",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "النتائج • المدة"
+    "resultsTitle": "النتائج • المدة",
+    "shortcuts": {
+      "rename": "إعادة تسمية",
+      "trash": "نقل إلى سلة المهملات",
+      "terminal": "الطرفية"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "حفظ",
     "reset": "إعادة الإعدادات الافتراضية",
-    "close": "إغلاق"
+    "close": "إغلاق",
+    "terminalApp": {
+      "label": "تطبيق الطرفية",
+      "help": "التطبيق المستخدم عند الضغط على F9، مثل /Applications/iTerm.app. اتركه فارغًا لاستخدام طرفية macOS.",
+      "error": "أدخل مسارًا مطلقًا لتطبيق .app، أو اتركه فارغًا لاستخدام طرفية macOS."
+    }
   },
   "language": {
     "label": "اللغة",

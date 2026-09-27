@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} परिणाम",
     "duration": "{{value}} मि.से.",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "परिणाम • अवधि"
+    "resultsTitle": "परिणाम • अवधि",
+    "shortcuts": {
+      "rename": "नाम बदलें",
+      "trash": "ट्रैश में भेजें",
+      "terminal": "टर्मिनल"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -126,7 +131,12 @@
     },
     "save": "सहेजें",
     "reset": "डिफ़ॉल्ट पर लौटाएँ",
-    "close": "बंद करें"
+    "close": "बंद करें",
+    "terminalApp": {
+      "label": "टर्मिनल ऐप",
+      "help": "F9 के लिए ऐप, जैसे /Applications/iTerm.app। macOS Terminal का उपयोग करने के लिए खाली छोड़ें।",
+      "error": ".app का पूर्ण पथ दर्ज करें, या macOS Terminal का उपयोग करने के लिए खाली छोड़ें।"
+    }
   },
   "language": {
     "label": "भाषा",

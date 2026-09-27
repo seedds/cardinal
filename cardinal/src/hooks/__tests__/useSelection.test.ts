@@ -76,6 +76,17 @@ const renderSelection = (initial: number[], initialVersion = 0) => {
 };
 
 describe('useSelection', () => {
+  it('resolves the focused selected path and ignores a deselected focused row', () => {
+    const { result, selectRow } = renderSelection([0, 1, 2]);
+    expect(result.current.activeSelectedPath).toBeNull();
+    selectRow(0);
+    metaClick(selectRow, 2);
+    expect(result.current.activeSelectedPath).toBe('item-2');
+    metaClick(selectRow, 2);
+    expect(result.current.selectedPaths).toEqual(['item-0']);
+    expect(result.current.activeSelectedPath).toBeNull();
+  });
+
   it('retains selection and keyboard navigation through tab effects and row-cache reloads', () => {
     const scrollToTop = vi.fn();
     const list = createVirtualListRef({ scrollToTop });
@@ -103,6 +114,7 @@ describe('useSelection', () => {
     rerender({ rows: [30, 10, 20].map(toSlabIndex), version: 1 });
     expect(result.current.activeRowIndex).toBe(2);
     expect(result.current.selectedPaths).toEqual(['item-1']);
+    expect(result.current.activeSelectedPath).toBe('item-1');
     expect(scrollToTop).toHaveBeenCalledTimes(1);
     list.current!.getItem = (index) => ({ path: `reloaded-${index}` });
     act(() => result.current.moveSelection(-1));

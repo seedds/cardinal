@@ -3,8 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { getWatchRootValidation, isPathInputValid } from '../utils/watchRoot';
 import ThemeSwitcher from './ThemeSwitcher';
 import LanguageSwitcher from './LanguageSwitcher';
+import {
+  DEFAULT_TERMINAL_APP,
+  isTerminalAppValid,
+  normalizeTerminalApp,
+} from '../utils/terminalApp';
 
 type PreferencesOverlayProps = {
+  terminalApp: string;
+  onTerminalAppChange: (value: string) => void;
   open: boolean;
   onClose: () => void;
   sortThreshold: number;
@@ -28,6 +35,8 @@ type PreferencesOverlayProps = {
 };
 
 export function PreferencesOverlay({
+  terminalApp,
+  onTerminalAppChange,
   open,
   onClose,
   sortThreshold,
@@ -46,6 +55,11 @@ export function PreferencesOverlay({
   themeResetToken,
 }: PreferencesOverlayProps): React.JSX.Element | null {
   const { t } = useTranslation();
+  const [terminalAppInput, setTerminalAppInput] = useState(terminalApp);
+
+  useEffect(() => {
+    if (open) setTerminalAppInput(terminalApp);
+  }, [open, terminalApp]);
   const [thresholdInput, setThresholdInput] = useState<string>(() => sortThreshold.toString());
   const [watchRootInput, setWatchRootInput] = useState<string>(() => watchRoot);
   const [ignorePathsInput, setIgnorePathsInput] = useState<string>(() => ignorePaths.join('\n'));
@@ -108,6 +122,9 @@ export function PreferencesOverlay({
 
   const { errorKey: watchRootErrorKey } = getWatchRootValidation(watchRootInput);
   const watchRootErrorMessage = watchRootErrorKey ? t(watchRootErrorKey) : null;
+  const terminalAppErrorMessage = isTerminalAppValid(terminalAppInput)
+    ? null
+    : t('preferences.terminalApp.error');
 
   const parsedIgnorePaths = ignorePathsInput
     .split(/\r?\n/)
@@ -128,10 +145,16 @@ export function PreferencesOverlay({
   })();
 
   const handleSave = (): void => {
-    if (watchRootErrorMessage || ignorePathsErrorMessage || includePathsErrorMessage) {
+    if (
+      watchRootErrorMessage ||
+      ignorePathsErrorMessage ||
+      includePathsErrorMessage ||
+      terminalAppErrorMessage
+    ) {
       return;
     }
     commitThreshold();
+    onTerminalAppChange(normalizeTerminalApp(terminalAppInput));
     const trimmedWatchRoot = watchRootInput.trim();
     onWatchConfigChange({
       watchRoot: trimmedWatchRoot,
@@ -145,6 +168,7 @@ export function PreferencesOverlay({
   };
 
   const handleReset = (): void => {
+    setTerminalAppInput(DEFAULT_TERMINAL_APP);
     setThresholdInput(defaultSortThreshold.toString());
     setWatchRootInput(defaultWatchRoot);
     setIgnorePathsInput(defaultIgnorePaths.join('\n'));
@@ -196,6 +220,43 @@ export function PreferencesOverlay({
                 />
                 <span className="preferences-switch__track" aria-hidden="true" />
               </label>
+            </div>
+          </div>
+          <div className="preferences-row">
+            <div className="preferences-row__details">
+              <label
+                className="preferences-label"
+                htmlFor="terminal-application"
+                title={t('preferences.terminalApp.help')}
+              >
+                {t('preferences.terminalApp.label')}
+              </label>
+            </div>
+            <div className="preferences-control">
+              <input
+                id="terminal-application"
+                className="preferences-field preferences-number-input preferences-watch-root-input"
+                type="text"
+                value={terminalAppInput}
+                onChange={(event) => setTerminalAppInput(event.target.value)}
+                placeholder="/Applications/iTerm.app"
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={Boolean(terminalAppErrorMessage)}
+                aria-describedby={
+                  terminalAppErrorMessage ? 'terminal-application-error' : undefined
+                }
+              />
+              {terminalAppErrorMessage && (
+                <p
+                  id="terminal-application-error"
+                  className="permission-status permission-status--error preferences-field-error"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {terminalAppErrorMessage}
+                </p>
+              )}
             </div>
           </div>
           <div className="preferences-row">
@@ -300,7 +361,10 @@ export function PreferencesOverlay({
             type="button"
             onClick={handleSave}
             disabled={Boolean(
-              watchRootErrorMessage || ignorePathsErrorMessage || includePathsErrorMessage,
+              watchRootErrorMessage ||
+              ignorePathsErrorMessage ||
+              includePathsErrorMessage ||
+              terminalAppErrorMessage,
             )}
           >
             {t('preferences.save')}

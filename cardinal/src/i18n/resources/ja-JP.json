@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} 件",
     "duration": "{{value}} ミリ秒",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "結果 • 所要時間"
+    "resultsTitle": "結果 • 所要時間",
+    "shortcuts": {
+      "rename": "名前を変更",
+      "trash": "ゴミ箱に入れる",
+      "terminal": "ターミナル"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "保存",
     "reset": "既定値に戻す",
-    "close": "閉じる"
+    "close": "閉じる",
+    "terminalApp": {
+      "label": "ターミナルアプリ",
+      "help": "F9 で使用するアプリ（例：/Applications/iTerm.app）。空欄の場合は macOS のターミナルを使用します。",
+      "error": ".app の絶対パスを入力するか、空欄にして macOS のターミナルを使用してください。"
+    }
   },
   "language": {
     "label": "言語",

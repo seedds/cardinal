@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} результатов",
     "duration": "{{value}} мс",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Результаты • Время"
+    "resultsTitle": "Результаты • Время",
+    "shortcuts": {
+      "rename": "Переименовать",
+      "trash": "В корзину",
+      "terminal": "Терминал"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "Сохранить",
     "reset": "Сбросить к значениям по умолчанию",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "terminalApp": {
+      "label": "Приложение терминала",
+      "help": "Приложение для F9, например /Applications/iTerm.app. Оставьте пустым, чтобы использовать Терминал macOS.",
+      "error": "Введите абсолютный путь к приложению .app или оставьте пустым для Терминала macOS."
+    }
   },
   "language": {
     "label": "Язык",

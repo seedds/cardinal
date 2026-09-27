@@ -32,6 +32,9 @@ export function useFileActions() {
     setError(null);
     setRenamePath(paths[0]);
   };
+  const openTerminal = (path: string, terminalApp: string) => {
+    void run('open_in_terminal', { path, terminalApp });
+  };
   const dialog =
     renamePath || error ? (
       <div
@@ -105,5 +108,5 @@ export function useFileActions() {
         </form>
       </div>
     ) : null;
-  return { trash, rename, dialog };
+  return { trash, rename, openTerminal, dialog };
 }

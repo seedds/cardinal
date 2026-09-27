@@ -7,8 +7,8 @@ Updated: 2026-09-27.
 - Fork: <https://github.com/seedds/cardinal>.
 - Upstream: <https://github.com/cardisoft/cardinal>.
 - Homebrew tap: <https://github.com/seedds/homebrew-tap>.
-- Current fork release: **0.1.26**, including search, selection, Trash, icon, and
-  hover stability fixes. The preceding release was 0.1.25, commit `b64e5d1`.
+- Current fork release: **0.1.27**, adding a configurable F9 terminal action and
+  status-bar shortcut hints. The preceding release was 0.1.26, commit `de2fadc`.
 - Check `git status` before editing to distinguish committed release code from
   subsequent local work.
 - [CHANGELOG.md](CHANGELOG.md) tracks released and unreleased work;
@@ -63,6 +63,10 @@ refreshing results; removals of indexed nodes still signal a change.
   the Finder AppleScript shipped in 0.1.25.
 - **F2:** rename a single item; preselect the name without its extension and use
   `renamex_np` with `RENAME_EXCL` to refuse replacement of another file.
+- **F9:** open the focused selected file’s parent directory, or the selected folder,
+  using `terminal.rs`. Preferences stores the terminal application path; macOS
+  Terminal is the default and `/Applications/iTerm.app` is supported. F2/F8/F9
+  hints appear on the Files status bar.
 - **Double Commander reveal:** use `open -n -a "Double Commander" --args --client -T`
   with the first selected path.
 

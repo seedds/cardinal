@@ -80,7 +80,12 @@
     "resultsCount_other": "{{formatted}} 个结果",
     "duration": "{{value}} 毫秒",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "结果 • 耗时"
+    "resultsTitle": "结果 • 耗时",
+    "shortcuts": {
+      "rename": "重命名",
+      "trash": "移到废纸篓",
+      "terminal": "终端"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -135,7 +140,12 @@
     },
     "save": "保存",
     "reset": "恢复默认设置",
-    "close": "关闭"
+    "close": "关闭",
+    "terminalApp": {
+      "label": "终端应用",
+      "help": "F9 使用的应用，例如 /Applications/iTerm.app。留空使用 macOS 终端。",
+      "error": "请输入 .app 的绝对路径，或留空使用 macOS 终端。"
+    }
   },
   "language": {
     "label": "语言",

@@ -11,6 +11,12 @@ import type { FullDiskAccessStatus } from './useFullDiskAccessPermission';
 import { useIgnorePaths } from './useIgnorePaths';
 import { useIncludePaths } from './useIncludePaths';
 import { useWatchRoot } from './useWatchRoot';
+import { useStoredState } from './useStoredState';
+import {
+  DEFAULT_TERMINAL_APP,
+  isTerminalAppValid,
+  normalizeTerminalApp,
+} from '../utils/terminalApp';
 
 type WatchConfigChangePayload = {
   watchRoot: string;
@@ -26,6 +32,8 @@ type UseAppPreferencesOptions = {
 };
 
 type UseAppPreferencesResult = {
+  terminalApp: string;
+  setTerminalApp: (value: string) => void;
   isPreferencesOpen: boolean;
   closePreferences: () => void;
   trayIconEnabled: boolean;
@@ -54,6 +62,15 @@ export function useAppPreferences({
   refreshSearchResults,
   i18n,
 }: UseAppPreferencesOptions): UseAppPreferencesResult {
+  const [terminalApp, setTerminalApp] = useStoredState<string>({
+    key: 'cardinal.terminalApp',
+    defaultValue: DEFAULT_TERMINAL_APP,
+    read: (raw) => (isTerminalAppValid(raw) ? normalizeTerminalApp(raw) : null),
+    write: (value) => value,
+    normalize: normalizeTerminalApp,
+    readErrorMessage: 'Unable to read saved terminal application',
+    writeErrorMessage: 'Unable to persist terminal application',
+  });
   const { watchRoot, setWatchRoot, defaultWatchRoot } = useWatchRoot();
   const { ignorePaths, setIgnorePaths, defaultIgnorePaths } = useIgnorePaths();
   const { includePaths, setIncludePaths, defaultIncludePaths } = useIncludePaths();
@@ -137,17 +154,20 @@ export function useAppPreferences({
   );
 
   const handleResetPreferences = useCallback(() => {
+    setTerminalApp(DEFAULT_TERMINAL_APP);
     setTrayIconEnabled(false);
     persistThemePreference('system');
     applyThemePreference('system');
     const nextLanguage = getBrowserLanguage();
     void i18n.changeLanguage(nextLanguage);
     setPreferencesResetToken((token) => token + 1);
-  }, [i18n]);
+  }, [i18n, setTerminalApp]);
 
   const closePreferences = useCallback(() => setIsPreferencesOpen(false), []);
 
   return {
+    terminalApp,
+    setTerminalApp,
     isPreferencesOpen,
     closePreferences,
     trayIconEnabled,

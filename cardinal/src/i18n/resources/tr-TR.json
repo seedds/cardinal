@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} sonuç",
     "duration": "{{value}} ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Sonuçlar • Süre"
+    "resultsTitle": "Sonuçlar • Süre",
+    "shortcuts": {
+      "rename": "Yeniden adlandır",
+      "trash": "Çöp kutusu",
+      "terminal": "Terminal"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "Kaydet",
     "reset": "Varsayılanlara döndür",
-    "close": "Kapat"
+    "close": "Kapat",
+    "terminalApp": {
+      "label": "Terminal uygulaması",
+      "help": "F9 ile kullanılan uygulama, ör. /Applications/iTerm.app. macOS Terminal için boş bırakın.",
+      "error": "Mutlak bir .app yolu girin veya macOS Terminal için boş bırakın."
+    }
   },
   "language": {
     "label": "Dil",

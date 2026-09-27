@@ -93,6 +93,7 @@ function App() {
     selectedIndicesRef,
     activeRowIndex,
     selectedPaths,
+    activeSelectedPath,
     handleRowSelect,
     selectSingleRow,
     clearSelection,
@@ -189,6 +190,8 @@ function App() {
 
   const {
     isPreferencesOpen,
+    terminalApp,
+    setTerminalApp,
     closePreferences,
     trayIconEnabled,
     setTrayIconEnabled,
@@ -233,6 +236,8 @@ function App() {
     triggerQuickLook,
     trashFiles: fileActions.trash,
     renameFile: fileActions.rename,
+    activeSelectedPath,
+    openTerminal: (path) => fileActions.openTerminal(path, terminalApp),
   });
 
   useFilesTabEffects({
@@ -452,6 +457,8 @@ function App() {
       </main>
       <PreferencesOverlay
         open={isPreferencesOpen}
+        terminalApp={terminalApp}
+        onTerminalAppChange={setTerminalApp}
         onClose={closePreferences}
         sortThreshold={sortThreshold}
         defaultSortThreshold={DEFAULT_SORTABLE_RESULT_THRESHOLD}

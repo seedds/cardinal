@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.27 — 2026-09-27
+
+- Add F9 to open the focused selected file’s directory, or the selected folder, in a terminal.
+- Add a saved Terminal application preference, defaulting to macOS Terminal and supporting custom paths such as `/Applications/iTerm.app`.
+- Show localized F2 Rename, F8 Trash, and F9 Terminal hints in the Files status bar, with wrapping for narrow windows.
+- Ignore F9 while editing text or displaying a modal dialog, and prevent repeated launches from held keys.
+
 ## 0.1.26 — 2026-09-27
 
 - Preserve pending search input and visible results during background refreshes.

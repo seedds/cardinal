@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PreferencesOverlay } from '../PreferencesOverlay';
+import { DEFAULT_TERMINAL_APP } from '../../utils/terminalApp';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -19,6 +20,8 @@ vi.mock('../LanguageSwitcher', () => ({
 }));
 
 const baseProps = {
+  terminalApp: DEFAULT_TERMINAL_APP,
+  onTerminalAppChange: vi.fn(),
   open: true,
   onClose: vi.fn(),
   sortThreshold: 200,
@@ -38,6 +41,46 @@ const baseProps = {
 };
 
 describe('PreferencesOverlay', () => {
+  it('stages the terminal application until Save and resets it to Terminal', () => {
+    const onTerminalAppChange = vi.fn();
+    render(<PreferencesOverlay {...baseProps} onTerminalAppChange={onTerminalAppChange} />);
+    const input = screen.getByLabelText('preferences.terminalApp.label');
+    expect(input).toHaveValue(DEFAULT_TERMINAL_APP);
+    fireEvent.change(input, { target: { value: '/Applications/iTerm.app' } });
+    expect(onTerminalAppChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('preferences.save'));
+    expect(onTerminalAppChange).toHaveBeenLastCalledWith('/Applications/iTerm.app');
+    fireEvent.click(screen.getByText('preferences.reset'));
+    expect(input).toHaveValue(DEFAULT_TERMINAL_APP);
+    fireEvent.click(screen.getByText('preferences.save'));
+    expect(onTerminalAppChange).toHaveBeenLastCalledWith(DEFAULT_TERMINAL_APP);
+  });
+
+  it('blocks invalid terminal paths and treats a blank field as the default', () => {
+    const onTerminalAppChange = vi.fn();
+    render(<PreferencesOverlay {...baseProps} onTerminalAppChange={onTerminalAppChange} />);
+    const input = screen.getByLabelText('preferences.terminalApp.label');
+    for (const value of ['iTerm.app', '/Applications/iTerm', '/Applications/bad\0.app']) {
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByText('preferences.save')).toBeDisabled();
+      expect(screen.getByText('preferences.terminalApp.error')).toBeInTheDocument();
+    }
+    fireEvent.change(input, { target: { value: '  ' } });
+    fireEvent.click(screen.getByText('preferences.save'));
+    expect(onTerminalAppChange).toHaveBeenCalledWith(DEFAULT_TERMINAL_APP);
+  });
+
+  it('discards unsaved terminal edits when reopened', () => {
+    const { rerender } = render(<PreferencesOverlay {...baseProps} />);
+    fireEvent.change(screen.getByLabelText('preferences.terminalApp.label'), {
+      target: { value: '/Applications/iTerm.app' },
+    });
+    rerender(<PreferencesOverlay {...baseProps} open={false} />);
+    rerender(<PreferencesOverlay {...baseProps} />);
+    expect(screen.getByLabelText('preferences.terminalApp.label')).toHaveValue(
+      DEFAULT_TERMINAL_APP,
+    );
+  });
   it('saves watch root updates via onWatchConfigChange', () => {
     const onWatchConfigChange = vi.fn();
     render(<PreferencesOverlay {...baseProps} onWatchConfigChange={onWatchConfigChange} />);

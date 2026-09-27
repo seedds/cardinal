@@ -31,6 +31,8 @@ type HookProps = {
   clearSelection: () => void;
   navigateSelection: (delta: 1 | -1, options?: { extend?: boolean }) => void;
   triggerQuickLook: () => void;
+  activeSelectedPath?: string | null;
+  openTerminal?: (path: string) => void;
 };
 
 describe('useAppHotkeys', () => {
@@ -68,6 +70,53 @@ describe('useAppHotkeys', () => {
       quickLookListener = listener;
       return quickLookUnlisten;
     });
+  });
+
+  it('opens the focused selected path once per F9 press', () => {
+    const openTerminal = vi.fn();
+    renderHotkeys({ activeSelectedPath: '/tmp/b', openTerminal });
+    const event = new KeyboardEvent('keydown', { key: 'F9', cancelable: true });
+    act(() => {
+      window.dispatchEvent(event);
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', repeat: true }));
+    });
+    expect(event.defaultPrevented).toBe(true);
+    expect(openTerminal).toHaveBeenCalledExactlyOnceWith('/tmp/b');
+  });
+
+  it.each(['metaKey', 'ctrlKey', 'altKey', 'shiftKey'])('ignores F9 with %s', (modifier) => {
+    const openTerminal = vi.fn();
+    renderHotkeys({ activeSelectedPath: '/tmp/b', openTerminal });
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', [modifier]: true })));
+    expect(openTerminal).not.toHaveBeenCalled();
+  });
+
+  it('ignores F9 with no focused selected path or on the events tab', () => {
+    const openTerminal = vi.fn();
+    const first = renderHotkeys({ activeSelectedPath: null, openTerminal });
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9' })));
+    first.unmount();
+    renderHotkeys({ activeTab: 'events', activeSelectedPath: '/tmp/b', openTerminal });
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9' })));
+    expect(openTerminal).not.toHaveBeenCalled();
+  });
+
+  it('ignores F9 in editable fields and while a modal dialog is open', () => {
+    const openTerminal = vi.fn();
+    renderHotkeys({ activeSelectedPath: '/tmp/b', openTerminal });
+    for (const tag of ['input', 'textarea']) {
+      const input = document.createElement(tag);
+      document.body.appendChild(input);
+      act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', bubbles: true })));
+      input.remove();
+    }
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    document.body.appendChild(dialog);
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9' })));
+    dialog.remove();
+    expect(openTerminal).not.toHaveBeenCalled();
   });
 
   it('handles Meta+F, Meta+R, Meta+O, and Meta+C shortcuts on files tab', async () => {

@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}}개 결과",
     "duration": "{{value}}ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "결과 • 소요 시간"
+    "resultsTitle": "결과 • 소요 시간",
+    "shortcuts": {
+      "rename": "이름 변경",
+      "trash": "휴지통으로 이동",
+      "terminal": "터미널"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "저장",
     "reset": "기본값으로 복원",
-    "close": "닫기"
+    "close": "닫기",
+    "terminalApp": {
+      "label": "터미널 앱",
+      "help": "F9에서 사용할 앱입니다. 예: /Applications/iTerm.app. 비워 두면 macOS 터미널을 사용합니다.",
+      "error": ".app의 절대 경로를 입력하거나 비워 두어 macOS 터미널을 사용하세요."
+    }
   },
   "language": {
     "label": "언어",

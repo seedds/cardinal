@@ -15,6 +15,7 @@ export type SelectionController = {
   activeRowIndex: number | null;
   shiftAnchorIndex: number | null;
   selectedPaths: string[];
+  activeSelectedPath: string | null;
   handleRowSelect: (rowIndex: number, options: RowSelectOptions) => void;
   selectSingleRow: (rowIndex: number) => void;
   clearSelection: () => void;
@@ -198,12 +199,20 @@ export const useSelection = (
     return paths;
   }, [selectedIndices, virtualListRef, displayedResults]);
 
+  // Resolve by slab identity: selectedPaths can omit unloaded rows, so its
+  // positions do not necessarily match selectedIndices.
+  const activeSelectedPath =
+    activeRowIndex !== null && selectedIndices.includes(activeRowIndex)
+      ? (selectedPathCacheRef.current.get(previousResultsRef.current[activeRowIndex]) ?? null)
+      : null;
+
   return {
     selectedIndices,
     selectedIndicesRef,
     activeRowIndex,
     shiftAnchorIndex,
     selectedPaths,
+    activeSelectedPath,
     handleRowSelect,
     selectSingleRow,
     clearSelection,

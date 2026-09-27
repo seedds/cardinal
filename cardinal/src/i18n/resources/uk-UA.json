@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} результатів",
     "duration": "{{value}}мс",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Результати • Тривалість"
+    "resultsTitle": "Результати • Тривалість",
+    "shortcuts": {
+      "rename": "Перейменувати",
+      "trash": "У смітник",
+      "terminal": "Термінал"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "Зберегти",
     "reset": "Скинути до значень за замовчуванням",
-    "close": "Закрити"
+    "close": "Закрити",
+    "terminalApp": {
+      "label": "Програма термінала",
+      "help": "Програма для F9, наприклад /Applications/iTerm.app. Залиште порожнім, щоб використовувати Термінал macOS.",
+      "error": "Введіть абсолютний шлях до програми .app або залиште порожнім для Термінала macOS."
+    }
   },
   "language": {
     "label": "Мова",

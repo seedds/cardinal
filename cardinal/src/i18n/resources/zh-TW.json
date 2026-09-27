@@ -80,7 +80,12 @@
     "resultsCount_other": "{{formatted}} 個結果",
     "duration": "{{value}} 毫秒",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "結果 • 耗時"
+    "resultsTitle": "結果 • 耗時",
+    "shortcuts": {
+      "rename": "重新命名",
+      "trash": "移到垃圾桶",
+      "terminal": "終端機"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -135,7 +140,12 @@
     },
     "save": "儲存",
     "reset": "恢復預設設定",
-    "close": "關閉"
+    "close": "關閉",
+    "terminalApp": {
+      "label": "終端機應用程式",
+      "help": "F9 使用的應用程式，例如 /Applications/iTerm.app。留空使用 macOS 終端機。",
+      "error": "請輸入 .app 的絕對路徑，或留空使用 macOS 終端機。"
+    }
   },
   "language": {
     "label": "語言",

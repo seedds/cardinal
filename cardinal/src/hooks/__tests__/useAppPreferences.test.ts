@@ -11,6 +11,7 @@ import { useIncludePaths } from '../useIncludePaths';
 import { useWatchRoot } from '../useWatchRoot';
 import { useAppPreferences } from '../useAppPreferences';
 import { invoke } from '@tauri-apps/api/core';
+import { DEFAULT_TERMINAL_APP } from '../../utils/terminalApp';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -71,6 +72,7 @@ describe('useAppPreferences', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
 
     mockedUseWatchRoot.mockReturnValue({
       watchRoot: '/workspace',
@@ -92,6 +94,24 @@ describe('useAppPreferences', () => {
     mockedSetWatchConfig.mockResolvedValue(undefined);
     mockedInvoke.mockResolvedValue(undefined);
     mockedGetBrowserLanguage.mockReturnValue('fr-FR');
+  });
+
+  it('persists the terminal application across mounts and restores its default on reset', () => {
+    const options = {
+      fullDiskAccessStatus: 'denied' as const,
+      isCheckingFullDiskAccess: false,
+      refreshSearchResults,
+      i18n: { changeLanguage },
+    };
+    const first = renderHook(() => useAppPreferences(options));
+    expect(first.result.current.terminalApp).toBe(DEFAULT_TERMINAL_APP);
+    act(() => first.result.current.setTerminalApp('/Applications/iTerm.app'));
+    first.unmount();
+    const second = renderHook(() => useAppPreferences(options));
+    expect(second.result.current.terminalApp).toBe('/Applications/iTerm.app');
+    act(() => second.result.current.handleResetPreferences());
+    expect(second.result.current.terminalApp).toBe(DEFAULT_TERMINAL_APP);
+    expect(window.localStorage.getItem('cardinal.terminalApp')).toBe(DEFAULT_TERMINAL_APP);
   });
 
   it('starts logic once when permission is granted', async () => {

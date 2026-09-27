@@ -26,6 +26,8 @@ type UseAppHotkeysOptions = {
   triggerQuickLook: () => void;
   trashFiles?: (paths: string[]) => void;
   renameFile?: (paths: string[]) => void;
+  activeSelectedPath?: string | null;
+  openTerminal?: (path: string) => void;
 };
 
 const QUICK_LOOK_KEYCODE_DOWN = 125;
@@ -50,6 +52,8 @@ export function useAppHotkeys({
   triggerQuickLook,
   trashFiles,
   renameFile,
+  activeSelectedPath = null,
+  openTerminal,
 }: UseAppHotkeysOptions): void {
   const keyboardStateRef = useRef<{ activeTab: StatusTabKey; activeRowIndex: number | null }>({
     activeTab,
@@ -111,6 +115,14 @@ export function useAppHotkeys({
     }
 
     const isSpaceKey = event.code === 'Space' || event.key === ' ';
+    if (event.key === 'F9' && !hasModifierKey(event)) {
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return false;
+      if (activeSelectedPath) {
+        event.preventDefault();
+        if (!event.repeat) openTerminal?.(activeSelectedPath);
+      }
+      return true;
+    }
     if ((event.key === 'F8' || event.key === 'F2') && !hasModifierKey(event)) {
       event.preventDefault();
       if (!event.repeat) {

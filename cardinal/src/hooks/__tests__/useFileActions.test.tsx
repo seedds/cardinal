@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { useFileActions } from '../useFileActions';
@@ -27,4 +27,16 @@ it('does not offer batch rename', () => {
   const { result } = renderHook(() => useFileActions());
   act(() => result.current.rename(['/a', '/b']));
   expect(result.current.dialog).toBeNull();
+});
+
+it('passes the terminal preference to the backend and displays launch errors', async () => {
+  vi.mocked(invoke).mockRejectedValueOnce('Terminal application was not found');
+  const { result } = renderHook(() => useFileActions());
+  await act(async () => result.current.openTerminal('/tmp/a', '/Applications/iTerm.app'));
+  expect(invoke).toHaveBeenLastCalledWith('open_in_terminal', {
+    path: '/tmp/a',
+    terminalApp: '/Applications/iTerm.app',
+  });
+  render(result.current.dialog);
+  expect(screen.getByRole('alert')).toHaveTextContent('Terminal application was not found');
 });

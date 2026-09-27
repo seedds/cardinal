@@ -81,7 +81,12 @@
     "resultsCount_other": "{{formatted}} resultados",
     "duration": "{{value}} ms",
     "resultsWithDuration": "{{results}} • {{duration}}",
-    "resultsTitle": "Resultados • Duração"
+    "resultsTitle": "Resultados • Duração",
+    "shortcuts": {
+      "rename": "Renomear",
+      "trash": "Lixeira",
+      "terminal": "Terminal"
+    }
   },
   "app": {
     "fullDiskAccess": {
@@ -136,7 +141,12 @@
     },
     "save": "Salvar",
     "reset": "Restaurar padrões",
-    "close": "Fechar"
+    "close": "Fechar",
+    "terminalApp": {
+      "label": "Aplicativo de terminal",
+      "help": "Aplicativo usado por F9, por exemplo /Applications/iTerm.app. Deixe em branco para usar o Terminal do macOS.",
+      "error": "Insira um caminho absoluto para um aplicativo .app ou deixe em branco para usar o Terminal do macOS."
+    }
   },
   "language": {
     "label": "Idioma",

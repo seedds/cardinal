@@ -4,6 +4,7 @@ mod lifecycle;
 mod quicklook;
 mod search_activity;
 mod sort;
+mod terminal;
 mod window_controls;
 
 use anyhow::{Context, Result};
@@ -132,6 +133,7 @@ pub fn run() -> Result<()> {
             open_in_finder,
             commands::trash_files,
             commands::rename_file,
+            terminal::open_in_terminal,
             commands::reveal_in_double_commander,
             open_path,
             toggle_quicklook,

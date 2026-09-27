@@ -188,6 +188,20 @@ const StatusBar = ({
         </div>
       </div>
 
+      {activeTab === 'files' && (
+        <div className="status-shortcuts">
+          <span className="status-shortcut">
+            <kbd>F2</kbd> {t('statusBar.shortcuts.rename')}
+          </span>
+          <span className="status-shortcut">
+            <kbd>F8</kbd> {t('statusBar.shortcuts.trash')}
+          </span>
+          <span className="status-shortcut">
+            <kbd>F9</kbd> {t('statusBar.shortcuts.terminal')}
+          </span>
+        </div>
+      )}
+
       <div className="status-right">
         <div className="status-section">
           <span className="status-label">{t('statusBar.searchLabel')}</span>
